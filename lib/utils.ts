@@ -1,0 +1,372 @@
+// @ts-nocheck
+
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+export const handleError = (error: unknown) => {
+  try {
+    if (error instanceof Error) {
+      // This is a native JavaScript error (e.g., TypeError, RangeError)
+      console.error("Error message:", error.message);
+      // Don't throw, just return the error message - this prevents crashing
+      return { error: error.message };
+    } else if (typeof error === "string") {
+      // This is a string error message
+      console.error("Error string:", error);
+      return { error };
+    } else {
+      // This is an unknown error type
+      let errorStr;
+      try {
+        errorStr = JSON.stringify(error, null, 2);
+      } catch (jsonError) {
+        errorStr = "[Unable to stringify error]";
+      }
+      console.error("Unknown error:", errorStr);
+      return { error: "Unknown error occurred" };
+    }
+  } catch (err) {
+    // Handle errors during the error handling process
+    console.error("Error during error handling:", err);
+    return { error: "An unexpected error occurred" };
+  }
+};
+
+export const compareArrays = (array1: any, array2: any) => {
+  if (array1.length !== array2.length) return false;
+  const neww = (object: any) =>
+    JSON.stringify(
+      Object.keys(object)
+        .sort()
+        .map((key) => [key, object[key]])
+    );
+  array1 = new Set(array1.map(neww));
+  return array2.every((object: any) => array1.has(neww(object)));
+};
+
+export const filterArray = (array: any, property: any) => {
+  return array
+    .filter((item: any) => item.name == property)
+    .map((s: any) => {
+      return s.value;
+    });
+};
+
+export const removeDuplicates = (array: any) => {
+  return [...new Set(array)];
+};
+
+export const randomize = (array: any) => {
+  return [...array].sort(() => 0.5 - Math.random());
+};
+
+/**
+ * Transforms product data into a consistent format for UI components
+ * This handles various edge cases and data inconsistencies
+ */
+export const transformProductSafely = (product: any) => {
+  try {
+    // Basic validation of the input product
+    if (!product || typeof product !== 'object' || !product._id) {
+      console.warn("[transformProductSafely] Skipping invalid product data (missing product or _id):", product);
+      return null;
+    }
+
+    let idString: string;
+    const productIdField = product._id;
+
+    if (typeof productIdField === 'string') {
+      idString = productIdField;
+    } else if (productIdField && typeof productIdField.toHexString === 'function') {
+      idString = productIdField.toHexString(); // Standard for BSON/MongoDB ObjectId
+    } else if (productIdField && typeof productIdField.toString === 'function') {
+      idString = productIdField.toString();
+      // Add a check to see if toString() returned a generic object string
+      if (idString === '[object Object]') {
+        console.warn(`[transformProductSafely] Product _id.toString() resulted in '[object Object]'. ID: ${JSON.stringify(productIdField)}, Product Name: ${product.name}`);
+        // Attempt to stringify the problematic ID or use a placeholder
+        idString = `INVALID_ID_${JSON.stringify(productIdField)}`;
+      }
+    } else {
+      console.error(`[transformProductSafely] Product _id is in an unhandled format. ID: ${JSON.stringify(productIdField)}, Product Name: ${product.name}`);
+      // Skip product if ID cannot be resolved
+      return null;
+    }
+    
+    if (!idString || idString.startsWith('INVALID_ID')) {
+        console.error(`[transformProductSafely] Failed to obtain a valid string ID for product. Original _id: ${JSON.stringify(product._id)}, Product Name: ${product.name}`);
+        return null; // Skip product if ID is invalid
+    }
+
+    let slug = product.slug;
+    if (!slug) {
+      console.warn(`[transformProductSafely] Product with ID ${idString} and name "${product.name}" is missing a slug. Generating one from name. This may cause linking issues if the database does not have a corresponding slug or if the generated slug is not unique/correct.`);
+      slug = String(product.name || "").toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
+      if (!slug && idString) {
+        console.warn(`[transformProductSafely] Product with ID ${idString} also has no name to generate slug. Using ID as fallback slug, which will likely fail for product page navigation.`);
+        slug = String(idString);
+      }
+    }
+    if (!slug) {
+        console.error(`[transformProductSafely] Product (ID: ${idString}) is missing a slug and cannot generate one. Name: "${product.name}". Product data:`, product);
+        return null;
+    }
+
+    // Use the first subProduct if available, otherwise use an empty object
+    const subProduct = (Array.isArray(product.subProducts) && product.subProducts.length > 0)
+      ? product.subProducts[0] || {}
+      : {};
+
+    // --- Sizes and Price Calculation --- 
+    let sizes: { size: string; price: number; qty: number }[] = [];
+    let price = 0;
+    // Check if subProduct.sizes exists and is an array
+    if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+      sizes = subProduct.sizes.map((size: any) => ({
+        size: String(size?.size || "N/A"),
+        price: parseFloat(size?.price) || 0,
+        qty: parseInt(size?.qty) || 0
+      })).filter((size: any) => size.size !== "N/A");
+    }
+    // Calculate price based on sizes or fallback to subProduct/product price
+    if (sizes.length > 0) {
+      const validPrices = sizes.map(s => s.price).filter(p => !isNaN(p) && p > 0);
+      price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
+    } else {
+      // Ensure prices are numbers before using parseFloat
+      const subProductPrice = typeof subProduct.price === 'number' || typeof subProduct.price === 'string' ? parseFloat(subProduct.price) : 0;
+      const productPrice = typeof product.price === 'number' || typeof product.price === 'string' ? parseFloat(product.price) : 0;
+      price = subProductPrice || productPrice || 0;
+    }
+
+    // --- Enhanced Image Handling --- 
+    let mainImage = "/images/broken-link.png";
+    
+    // Debug product image structure
+    const hasDirectImage = !!product.image;
+    const hasImagesArray = Array.isArray(product.images) && product.images.length > 0;
+    const hasSubProducts = Array.isArray(product.subProducts) && product.subProducts.length > 0;
+    const firstSubProductHasImages = hasSubProducts && 
+                                    Array.isArray(product.subProducts[0]?.images) && 
+                                    product.subProducts[0].images.length > 0;
+    
+    let imageUrl = null;
+    let imageType = null;
+    
+    // First try sub-product images (most common case)
+    if (firstSubProductHasImages) {
+      const firstImg = product.subProducts[0].images[0];
+      if (typeof firstImg === 'string') {
+        imageUrl = firstImg;
+        imageType = 'string';
+      } else if (firstImg && typeof firstImg === 'object' && firstImg.url) {
+        imageUrl = firstImg.url;
+        imageType = 'object.url';
+      }
+    }
+    
+    // If no sub-product image, try direct product image or images array
+    if (!imageUrl && hasDirectImage) {
+      if (typeof product.image === 'string') {
+        imageUrl = product.image;
+        imageType = 'direct.string';
+      } else if (product.image && typeof product.image === 'object' && product.image.url) {
+        imageUrl = product.image.url;
+        imageType = 'direct.object.url';
+      }
+    }
+    
+    if (!imageUrl && hasImagesArray) {
+      const firstImg = product.images[0];
+      if (typeof firstImg === 'string') {
+        imageUrl = firstImg;
+        imageType = 'array.string';
+      } else if (firstImg && typeof firstImg === 'object' && firstImg.url) {
+        imageUrl = firstImg.url;
+        imageType = 'array.object.url';
+      }
+    }
+    
+    // Use the imageUrl if found, otherwise keep the default
+    if (imageUrl) {
+      mainImage = imageUrl;
+    }
+    
+    // Log debug info for problematic products
+    if (!imageUrl) {
+      console.debug(`Product image debug for ${product.name} (ID: ${idString}):`, {
+        hasDirectImage,
+        hasImagesArray,
+        hasSubProducts,
+        firstSubProductHasImages,
+        productStructure: JSON.stringify(product).substring(0, 200) + '...'
+      });
+    }
+    
+    // Create the gallery array from all available images
+    const gallery = [];
+    
+    // Add sub-product images to gallery
+    if (firstSubProductHasImages) {
+      product.subProducts[0].images.forEach((img: any) => {
+        const imgUrl = typeof img === 'string' ? img : (img?.url || null);
+        if (imgUrl) gallery.push(imgUrl);
+      });
+    }
+    
+    // Add product images array to gallery if it exists
+    if (hasImagesArray) {
+      product.images.forEach((img: any) => {
+        const imgUrl = typeof img === 'string' ? img : (img?.url || null);
+        if (imgUrl) gallery.push(imgUrl);
+      });
+    }
+    
+    // Add direct product image if it exists
+    if (hasDirectImage && !gallery.includes(imageUrl)) {
+      const directImgUrl = typeof product.image === 'string' ? product.image : (product.image?.url || null);
+      if (directImgUrl) gallery.push(directImgUrl);
+    }
+
+    // --- Category Handling --- 
+    let categoryValue = "";
+    if (product.category) {
+      // If category is an object (populated), use name or ID
+      if (typeof product.category === 'object' && product.category !== null) {
+        categoryValue = String(product.category.name || product.category._id || "");
+      } 
+      // If category is a primitive (likely an ID string)
+      else {
+        categoryValue = String(product.category);
+      }
+    }
+
+    // Placeholder logic for subtitle and colorCountText
+    // In a real scenario, these would come from product data
+    let subtitle: string | undefined = undefined;
+    if (product.tags?.includes("Sustainable")) {
+      subtitle = "Sustainable Materials";
+    } else if (product.status === "Coming Soon") {
+      subtitle = "Coming Soon";
+    }
+
+    const colorCount = product.availableColors?.length || 1;
+    const colorCountText = `${colorCount} Colour${colorCount > 1 ? 's' : ''}`;
+
+    // --- Construct Plain Object --- 
+    return {
+      id: idString, // Use the processed idString
+      name: String(product.name || "Unnamed Product"),
+      category: categoryValue, // Already processed string
+      image: mainImage, // Enhanced image handling
+      rating: parseFloat(product.rating) || 0,
+      reviews: parseInt(product.numReviews) || 0,
+      price: price, // Already processed number
+      originalPrice: parseFloat(subProduct.originalPrice) || price, // Fallback to calculated price
+      discount: parseInt(subProduct.discount) || 0,
+      isBestseller: !!product.featured,
+      isSale: !!subProduct.isSale,
+      slug: slug, // Use the processed slug
+      prices: (subProduct.sizes || [])
+        .map((s: any) => parseFloat(s?.price) || 0)
+        .filter((p: number) => !isNaN(p) && p > 0) // Ensure valid numbers
+        .sort((a: number, b: number) => a - b),
+      description: String(product.description || ""),
+      gallery: gallery, // Enhanced gallery handling
+      sizes: sizes, // Already processed array of plain objects
+      subtitle: product.subtitle || subtitle, // Use direct product.subtitle if available, otherwise derived
+      colorCountText: product.colorCountText || colorCountText, // Use direct if available
+    };
+
+  } catch (error) {
+    console.error("[transformProductSafely] Error transforming product:", error, "Input product:", product);
+    return null; // Return null on any unexpected error during transformation
+  }
+};
+
+/**
+ * Extract image URL safely from various product data structures
+ * @param product - The product object which might contain image data
+ * @param defaultImage - Optional fallback image path
+ * @returns A string URL to the product image
+ */
+export const extractProductImage = (product: any, defaultImage: string = "/images/broken-link.png"): string => {
+  if (!product) return defaultImage;
+
+  try {
+    // Based on the product schema, the most common image location is in subProducts[0].images[0]
+    if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+      const firstSubProduct = product.subProducts[0];
+      
+      // Check if subProduct has images array with content
+      if (Array.isArray(firstSubProduct.images) && firstSubProduct.images.length > 0) {
+        const firstImage = firstSubProduct.images[0];
+        
+        // Handle different possible image formats
+        if (typeof firstImage === 'string') {
+          return firstImage; // Direct string URL
+        } else if (firstImage && typeof firstImage === 'object') {
+          // Object with url property (Cloudinary format)
+          if (firstImage.url) return firstImage.url;
+          
+          // If it's a Cloudinary object with secure_url
+          if (firstImage.secure_url) return firstImage.secure_url;
+        }
+      }
+    }
+
+    // Fallback to direct product.image if available
+    if (product.image) {
+      if (typeof product.image === 'string') return product.image;
+      if (product.image.url) return product.image.url;
+      if (product.image.secure_url) return product.image.secure_url;
+    }
+    
+    // Try product.images array if available
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      const firstImg = product.images[0];
+      if (typeof firstImg === 'string') return firstImg;
+      if (firstImg && firstImg.url) return firstImg.url;
+      if (firstImg && firstImg.secure_url) return firstImg.secure_url;
+    }
+
+    // Last resort - return default image
+    return defaultImage;
+  } catch (error) {
+    console.error("Error extracting product image:", error);
+    return defaultImage;
+  }
+};
+
+/**
+ * Extract category image URL safely from category data
+ * @param category - The category object which might contain image data
+ * @param defaultImage - Optional fallback image path
+ * @returns A string URL to the category image
+ */
+export const extractCategoryImage = (category: any, defaultImage: string = "/images/broken-link.png"): string => {
+  if (!category) return defaultImage;
+  
+  try {
+    // Handle direct image property
+    if (category.image) {
+      if (typeof category.image === 'string') return category.image;
+      if (category.image.url) return category.image.url;
+    }
+    
+    // Handle images array (according to your category schema)
+    if (Array.isArray(category.images) && category.images.length > 0) {
+      const firstImg = category.images[0];
+      if (typeof firstImg === 'string') return firstImg;
+      if (firstImg && firstImg.url) return firstImg.url;
+    }
+    
+    return defaultImage;
+  } catch (error) {
+    console.error("Error extracting category image:", error);
+    return defaultImage;
+  }
+};

@@ -1,0 +1,66 @@
+/** @type {import('next').NextConfig} */
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+import webpack from 'webpack';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "placehold.co",
+      },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+      },
+    ],
+    domains: ['res.cloudinary.com'],
+  },
+  webpack: (config, { isServer }) => {
+    // Exclude Node.js built-in modules from client-side bundle
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+        "timers/promises": false,
+        tls: false,
+        "child_process": false,
+        net: false,
+        dns: false,
+        http2: false,
+        http: false,
+        https: false,
+        zlib: false,
+        util: false,
+        assert: false,
+        stream: false,
+        crypto: false,
+        buffer: false,
+      };
+      
+      // Add polyfill for Buffer and process
+      config.plugins.push(
+        new webpack.ProvidePlugin({
+          Buffer: ['buffer', 'Buffer'],
+          process: 'process/browser',
+        }),
+      );
+    }
+
+    // Better handling for node-gyp-build
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'node-gyp-build': resolve(__dirname, './lib/utils/node-gyp-build-stub.js')
+    };
+    
+    return config;
+  },
+};
+
+export default nextConfig;
