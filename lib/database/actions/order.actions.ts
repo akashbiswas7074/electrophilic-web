@@ -57,6 +57,7 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
   let savedOrder: any = null;
   let savedPendingOrder: any = null;
   let plainVerificationCode: string | undefined; // Fix: declare at top for COD flow
+  
   try {
     const {
       userId,
@@ -131,51 +132,85 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
     const productDetailsMap = new Map(productsInDb.map((p) => [(p as any)._id.toString(), p]));
     console.log("[processCheckoutSteps] Fetched product details map created.");
 
+    // Process cart items and automatically assign sizes if missing
     for (const item of cartItems as any[]) {
-      const productId = item.product.toString();
-      console.log(`[processCheckoutSteps] Processing item loop for Product ID: ${productId}, Size: ${item.size}`);
-      const productDetails = productDetailsMap.get(productId);
-      const requestedQty = (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : ((typeof item.qty === 'number' && item.qty > 0) ? item.qty : 1);
-      const productName = productDetails?.name || item.name || `Product ID ${productId}`;
+        const productId = item.product.toString();
+        const productData = productDetailsMap.get(productId); // Rename to productData to avoid conflict
+        
+        // If size is missing, try to assign a default size
+        if (!item.size) {
+            console.log(`[processCheckoutSteps] Size is undefined for Product ID: ${productId}`);
+            
+            if (productData && productData.subProducts && productData.subProducts.length > 0) {
+                const subProduct = productData.subProducts[0];
+                if (subProduct && subProduct.sizes && subProduct.sizes.length > 0) {
+                    item.size = subProduct.sizes[0].size; // Automatically set to the first available size
+                    console.log(`[processCheckoutSteps] Automatically set size for ${item.name} to: ${item.size}`);
+                } else {
+                    console.error(`[processCheckoutSteps] No sizes available for Product ID: ${productId}`);
+                    await session.abortTransaction();
+                    return {
+                        success: false,
+                        message: `No sizes available for product: ${item.name || productId}.`,
+                        productId,
+                        size: item.size
+                    };
+                }
+            } else {
+                console.error(`[processCheckoutSteps] Product details or subProducts not found for Product ID: ${productId}`);
+                await session.abortTransaction();
+                return {
+                    success: false,
+                    message: `Product details not found for product: ${item.name || productId}.`,
+                    productId,
+                    size: item.size
+                };
+            }
+        }
 
-      // Find the specific size variant stock (assuming first subProduct)
-      let availableStock: number | undefined = undefined;
-      let sizeFound = false;
+        console.log(`[processCheckoutSteps] Processing item loop for Product ID: ${productId}, Size: ${item.size}`);
+        const productDetails = productDetailsMap.get(productId); // This is the conflicting declaration
+        const requestedQty = (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : ((typeof item.qty === 'number' && item.qty > 0) ? item.qty : 1);
+        const productName = productDetails?.name || item.name || `Product ID ${productId}`;
 
-      if (productDetails && productDetails.subProducts && productDetails.subProducts.length > 0) {
-          // Assume the first subProduct is the relevant one
-          const subProduct = productDetails.subProducts[0];
+        // Find the specific size variant stock (assuming first subProduct)
+        let availableStock: number | undefined = undefined;
+        let sizeFound = false;
 
-          if (subProduct && subProduct.sizes) {
-              const sizeInfo = subProduct.sizes.find((s: any) => s.size === item.size);
-              if (sizeInfo) {
-                  availableStock = sizeInfo.qty;
-                  sizeFound = true;
-                  console.log(`[processCheckoutSteps] Found matching size '${item.size}' for Product ID ${productId}. Available stock: ${availableStock}`);
-              } else {
-                  console.log(`[processCheckoutSteps] Size '${item.size}' not found within the subProduct for Product ID ${productId}.`);
-              }
-          } else {
-              console.log(`[processCheckoutSteps] First subProduct or its sizes not found for Product ID ${productId}.`);
-          }
-      } else {
-          console.log(`[processCheckoutSteps] Product details or subProducts not found in map for Product ID ${productId}.`);
-      }
+        if (productDetails && productDetails.subProducts && productDetails.subProducts.length > 0) {
+            // Assume the first subProduct is the relevant one
+            const subProduct = productDetails.subProducts[0];
 
-      console.log(`[processCheckoutSteps] Stock Check for \"${productName}\" (ID: ${productId}, Size: ${item.size}): Requested Qty = ${requestedQty}, Available Stock = ${availableStock ?? 'N/A'}`);
+            if (subProduct && subProduct.sizes) {
+                const sizeInfo = subProduct.sizes.find((s: any) => s.size === item.size);
+                if (sizeInfo) {
+                    availableStock = sizeInfo.qty;
+                    sizeFound = true;
+                    console.log(`[processCheckoutSteps] Found matching size '${item.size}' for Product ID ${productId}. Available stock: ${availableStock}`);
+                } else {
+                    console.log(`[processCheckoutSteps] Size '${item.size}' not found within the subProduct for Product ID ${productId}.`);
+                }
+            } else {
+                console.log(`[processCheckoutSteps] First subProduct or its sizes not found for Product ID ${productId}.`);
+            }
+        } else {
+            console.log(`[processCheckoutSteps] Product details or subProducts not found in map for Product ID ${productId}.`);
+        }
 
-      // Check if the specific size was found and if stock is sufficient
-      if (!sizeFound || availableStock === undefined || availableStock < requestedQty) {
-        const reason = !sizeFound ? `Size '${item.size}' not found` : `Insufficient stock (Requested: ${requestedQty}, Available: ${availableStock})`;
-        console.error(`[processCheckoutSteps] Stock check failed for "${productName}" (Size: ${item.size}). Reason: ${reason}`);
-        await session.abortTransaction();
-        return {
-          success: false,
-          message: `Sorry, "${productName}" (Size: ${item.size}) is unavailable or has insufficient stock. ${reason}.`,
-          productId: productId,
-          size: item.size,
-        };
-      }
+        console.log(`[processCheckoutSteps] Stock Check for \"${productName}\" (ID: ${productId}, Size: ${item.size}): Requested Qty = ${requestedQty}, Available Stock = ${availableStock ?? 'N/A'}`);
+
+        // Check if the specific size was found and if stock is sufficient
+        if (!sizeFound || availableStock === undefined || availableStock < requestedQty) {
+          const reason = !sizeFound ? `Size '${item.size}' not found` : `Insufficient stock (Requested: ${requestedQty}, Available: ${availableStock})`;
+          console.error(`[processCheckoutSteps] Stock check failed for "${productName}" (Size: ${item.size}). Reason: ${reason}`);
+          await session.abortTransaction();
+          return {
+            success: false,
+            message: `Sorry, "${productName}" (Size: ${item.size}) is unavailable or has insufficient stock. ${reason}.`,
+            productId: productId,
+            size: item.size,
+          };
+        }
     }
     console.log("[processCheckoutSteps] Stock check passed for all items.");
 

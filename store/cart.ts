@@ -33,7 +33,8 @@ type CartActions = {
   addToCart: (item: CartItem) => void;
   updateCart: (items: CartItem[]) => void;
   emptyCart: () => void;
-  setCartDrawerOpen: (isOpen: boolean) => void; // Add drawer action
+  setCartDrawerOpen: (isOpen: boolean) => void;
+  ensureCartItemSizes: () => void; // New function to ensure all items have sizes
 };
 
 // Helper function to generate _uid
@@ -246,5 +247,42 @@ export const useCartStore = create<CartState & CartActions>()((set, get) => ({
     }
     // Cancel any pending debounced saves of the old cart
     debouncedSave.cancel();
+  },
+
+  // --- Utility Actions ---
+  ensureCartItemSizes: () => {
+    const cart = get().cart;
+    let itemsUpdated = false;
+    
+    const updatedCartItems = cart.cartItems.map(item => {
+      if (!item.size) {
+        console.warn(`Item ${item.name} (ID: ${item._id}) is missing a size. Setting default size.`);
+        itemsUpdated = true;
+        
+        // Set a default size, can be customized based on your inventory logic
+        const defaultSize = 'M'; // Default to Medium size or most common size in your inventory
+        
+        // Create an updated item with the default size
+        return {
+          ...item,
+          size: defaultSize,
+          // Regenerate UID to reflect size change
+          _uid: `${item._id}_${defaultSize}`
+        };
+      }
+      return item;
+    });
+
+    if (itemsUpdated) {
+      set({ cart: { cartItems: updatedCartItems } });
+      console.log("Updated cart items with default sizes:", updatedCartItems);
+      // Save the updated cart to the database
+      debouncedSave(updatedCartItems);
+      toast.info("Some items in your cart were missing sizes. Default sizes have been applied.", {
+        duration: 4000,
+      });
+    }
+    
+    return itemsUpdated; // Return whether any items were updated
   },
 }));

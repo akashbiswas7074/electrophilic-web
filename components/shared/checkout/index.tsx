@@ -422,6 +422,7 @@ export default function CheckoutComponent() {
       setPlaceOrderLoading(false);
       return;
     }
+    
     console.log("[placeOrderHandler] Pre-flight validation passed.");
 
     // --- Prepare Shipping Address ---
