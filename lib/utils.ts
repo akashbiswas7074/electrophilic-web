@@ -68,6 +68,11 @@ export const randomize = (array: any) => {
  * This handles various edge cases and data inconsistencies
  */
 export const transformProductSafely = (product: any) => {
+  if (!product) {
+    console.warn("transformProductSafely received null/undefined product");
+    return null;
+  }
+
   try {
     // Basic validation of the input product
     if (!product || typeof product !== 'object' || !product._id) {
@@ -120,26 +125,45 @@ export const transformProductSafely = (product: any) => {
       ? product.subProducts[0] || {}
       : {};
 
-    // --- Sizes and Price Calculation --- 
+    // --- Enhanced Sizes and Price Calculation (Optional Sizes) --- 
     let sizes: { size: string; price: number; qty: number }[] = [];
     let price = 0;
+    let defaultQuantity = 0;
+    
     // Check if subProduct.sizes exists and is an array
-    if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+    if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
+      // Process sizes if available
       sizes = subProduct.sizes.map((size: any) => ({
         size: String(size?.size || "N/A"),
         price: parseFloat(size?.price) || 0,
         qty: parseInt(size?.qty) || 0
       })).filter((size: any) => size.size !== "N/A");
-    }
-    // Calculate price based on sizes or fallback to subProduct/product price
-    if (sizes.length > 0) {
-      const validPrices = sizes.map(s => s.price).filter(p => !isNaN(p) && p > 0);
-      price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
+      
+      // Calculate price based on sizes
+      if (sizes.length > 0) {
+        const validPrices = sizes.map(s => s.price).filter(p => !isNaN(p) && p > 0);
+        price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
+        // Calculate total quantity from all sizes
+        defaultQuantity = sizes.reduce((total, size) => total + size.qty, 0);
+      }
     } else {
-      // Ensure prices are numbers before using parseFloat
+      // No sizes available - use direct product/subProduct data
       const subProductPrice = typeof subProduct.price === 'number' || typeof subProduct.price === 'string' ? parseFloat(subProduct.price) : 0;
       const productPrice = typeof product.price === 'number' || typeof product.price === 'string' ? parseFloat(product.price) : 0;
+      
       price = subProductPrice || productPrice || 0;
+      
+      // Use direct quantity/stock from product or subProduct
+      const subProductQty = typeof subProduct.qty === 'number' ? subProduct.qty : 
+                           typeof subProduct.qty === 'string' ? parseInt(subProduct.qty) : 0;
+      const subProductStock = typeof subProduct.stock === 'number' ? subProduct.stock : 
+                             typeof subProduct.stock === 'string' ? parseInt(subProduct.stock) : 0;
+      const productStock = typeof product.stock === 'number' ? product.stock : 
+                          typeof product.stock === 'string' ? parseInt(product.stock) : 0;
+      const productQty = typeof product.qty === 'number' ? product.qty : 
+                        typeof product.qty === 'string' ? parseInt(product.qty) : 0;
+      
+      defaultQuantity = subProductQty || subProductStock || productStock || productQty || 0;
     }
 
     // --- Enhanced Image Handling --- 
@@ -149,64 +173,28 @@ export const transformProductSafely = (product: any) => {
     const hasDirectImage = !!product.image;
     const hasImagesArray = Array.isArray(product.images) && product.images.length > 0;
     const hasSubProducts = Array.isArray(product.subProducts) && product.subProducts.length > 0;
-    const firstSubProductHasImages = hasSubProducts && 
-                                    Array.isArray(product.subProducts[0]?.images) && 
-                                    product.subProducts[0].images.length > 0;
     
-    let imageUrl = null;
-    let imageType = null;
-    
-    // First try sub-product images (most common case)
+    let firstSubProductHasImages = false;
+    if (hasSubProducts) {
+      const firstSubProduct = product.subProducts[0];
+      firstSubProductHasImages = Array.isArray(firstSubProduct?.images) && firstSubProduct.images.length > 0;
+    }
+
+    // Determine image URL based on available sources
+    let imageUrl = "";
     if (firstSubProductHasImages) {
-      const firstImg = product.subProducts[0].images[0];
-      if (typeof firstImg === 'string') {
-        imageUrl = firstImg;
-        imageType = 'string';
-      } else if (firstImg && typeof firstImg === 'object' && firstImg.url) {
-        imageUrl = firstImg.url;
-        imageType = 'object.url';
-      }
+      const img = product.subProducts[0].images[0];
+      imageUrl = typeof img === 'string' ? img : (img?.url || null);
+    } else if (hasImagesArray) {
+      const img = product.images[0];
+      imageUrl = typeof img === 'string' ? img : (img?.url || null);
+    } else if (hasDirectImage) {
+      imageUrl = typeof product.image === 'string' ? product.image : (product.image?.url || null);
     }
     
-    // If no sub-product image, try direct product image or images array
-    if (!imageUrl && hasDirectImage) {
-      if (typeof product.image === 'string') {
-        imageUrl = product.image;
-        imageType = 'direct.string';
-      } else if (product.image && typeof product.image === 'object' && product.image.url) {
-        imageUrl = product.image.url;
-        imageType = 'direct.object.url';
-      }
-    }
-    
-    if (!imageUrl && hasImagesArray) {
-      const firstImg = product.images[0];
-      if (typeof firstImg === 'string') {
-        imageUrl = firstImg;
-        imageType = 'array.string';
-      } else if (firstImg && typeof firstImg === 'object' && firstImg.url) {
-        imageUrl = firstImg.url;
-        imageType = 'array.object.url';
-      }
-    }
-    
-    // Use the imageUrl if found, otherwise keep the default
-    if (imageUrl) {
-      mainImage = imageUrl;
-    }
-    
-    // Log debug info for problematic products
-    if (!imageUrl) {
-      console.debug(`Product image debug for ${product.name} (ID: ${idString}):`, {
-        hasDirectImage,
-        hasImagesArray,
-        hasSubProducts,
-        firstSubProductHasImages,
-        productStructure: JSON.stringify(product).substring(0, 200) + '...'
-      });
-    }
-    
-    // Create the gallery array from all available images
+    mainImage = imageUrl || "/images/broken-link.png";
+
+    // --- Gallery Processing ---
     const gallery = [];
     
     // Add sub-product images to gallery
@@ -234,13 +222,14 @@ export const transformProductSafely = (product: any) => {
     // --- Category Handling --- 
     let categoryValue = "";
     if (product.category) {
-      // If category is an object (populated), use name or ID
-      if (typeof product.category === 'object' && product.category !== null) {
-        categoryValue = String(product.category.name || product.category._id || "");
-      } 
-      // If category is a primitive (likely an ID string)
-      else {
-        categoryValue = String(product.category);
+      if (typeof product.category === 'string') {
+        categoryValue = product.category;
+      } else if (typeof product.category === 'object') {
+        if (product.category.name) {
+          categoryValue = product.category.name;
+        } else if (product.category._id) {
+          categoryValue = product.category._id.toString();
+        }
       }
     }
 

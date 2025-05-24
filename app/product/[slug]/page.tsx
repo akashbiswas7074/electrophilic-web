@@ -108,7 +108,8 @@ const ProductPage = () => {
   const [isInWishlist, setIsInWishlist] = useState(false);
   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const [initialWishlistFetched, setInitialWishlistFetched] = useState(false);
-  const [showFullDescription, setShowFullDescription] = useState(false); // Added missing state
+  const [showFullDescription, setShowFullDescription] = useState(false);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false); // Added missing state
 
   // Zoom feature states
   const [isZooming, setIsZooming] = useState(false);
@@ -157,36 +158,7 @@ const ProductPage = () => {
       }
 
       setProductData(productResult);
-      if ('name' in productResult && productResult.name) {
-        document.title = `Buy ${productResult.name} | VibeCart`;
-      }
-
-      if (urlSizeParam !== null) {
-        const urlSizeIndex = Number(urlSizeParam);
-        if (
-          "sizes" in productResult &&
-          Array.isArray(productResult.sizes) &&
-          urlSizeIndex >= 0 &&
-          urlSizeIndex < productResult.sizes.length
-        ) {
-          const sizeData = ('subProducts' in productResult && Array.isArray(productResult.subProducts))
-            ? productResult.subProducts[0]?.sizes?.[urlSizeIndex]
-            : undefined;
-          if (sizeData && sizeData.qty > 0) {
-            setSelectedSizeIndex(urlSizeIndex);
-          } else {
-            setSelectedSizeIndex(undefined);
-            const currentParams = new URLSearchParams(searchParams.toString());
-            currentParams.delete("size");
-            router.replace(`/product/${slug}?${currentParams.toString()}`, { scroll: false });
-          }
-        } else {
-          setSelectedSizeIndex(undefined);
-        }
-      } else {
-        setSelectedSizeIndex(undefined);
-      }
-
+      
       const subCategoryIds = (productResult as { subCategories?: any[] }).subCategories?.map((i: any) => i._id) || [];
       if (subCategoryIds.length > 0) {
         console.log("Fetching related products for categories:", subCategoryIds);
@@ -239,7 +211,12 @@ const ProductPage = () => {
       const data = await response.json();
       console.log("Fetched wishlist data:", data);
       if (data.success && Array.isArray(data.wishlist)) {
-        const found = data.wishlist.some((item: any) => item.product === productData._id);
+        // Check if product is in wishlist by comparing product IDs
+        const found = data.wishlist.some((item: any) => 
+          (item.product === productData._id) || 
+          (item.product?._id === productData._id) || 
+          (item._id === productData._id)
+        );
         console.log("Is product in wishlist?", found);
         setIsInWishlist(found);
       } else {
@@ -265,6 +242,28 @@ const ProductPage = () => {
       fetchWishlistStatus();
     }
   }, [productData, session, initialWishlistFetched, fetchWishlistStatus]);
+
+  // Initialize product data
+  const productInitialized = useRef(false);
+  useEffect(() => {
+    // Initialize product data
+    if (productData && !productInitialized.current) {
+      productInitialized.current = true;
+      
+      // Auto-select first valid size for products with sizes
+      if (productData.sizes && productData.sizes.length > 0 && productData.sizes.some((size: any) => size.size && size.size.trim() !== "")) {
+        // Find the first size with stock and select it
+        const firstAvailableIndex = productData.sizes.findIndex((size: any) => 
+          size.size && size.size.trim() !== "" && size.qty > 0
+        );
+        
+        if (firstAvailableIndex >= 0) {
+          setSelectedSizeIndex(firstAvailableIndex);
+        }
+      }
+    }
+  }, [productData]);
+
   // Mobile thumbnail scrolling is now handled by the ThumbnailScroller component
 
   // Effect to update zoom pane if selected image changes while zooming
@@ -293,6 +292,83 @@ const ProductPage = () => {
 
   const handleAddToCart = () => {
     console.log("Add to cart clicked. Selected size index:", selectedSizeIndex);
+    
+    // Check if product has no sizes or only empty size values
+    if (!hasValidSizes(p)) {
+      console.log("Product has no valid sizes, adding directly to cart");
+      
+      if (!productData || !productData.subProducts?.[0]) {
+        console.error("Cannot add to cart: Critical product data missing.", { productData });
+        toast.error("Could not add item to cart. Product data missing.");
+        return;
+      }
+
+      const subProduct = productData.subProducts[0];
+      const subProductDiscount = subProduct.discount || 0;
+      
+      // For products with empty sizes, check if there's a size entry with quantity
+      let productPrice = 0;
+      let availableQty = 0;
+      
+      // First check if there's a size object with a qty value
+      if (subProduct.sizes && subProduct.sizes.length > 0) {
+        const firstSize = subProduct.sizes[0];
+        if (firstSize) {
+          productPrice = firstSize.price || 0;
+          availableQty = firstSize.qty || 0;
+          console.log(`Using first size entry: price=${productPrice}, qty=${availableQty}`);
+        }
+      }
+      
+      // If no valid price/qty from size, fall back to subProduct properties
+      if (!productPrice) {
+        productPrice = subProduct.price || productData.price || 0;
+        console.log(`Using fallback price: ${productPrice}`);
+      }
+      
+      if (!availableQty) {
+        availableQty = subProduct.qty || subProduct.stock || productData.qty || productData.stock || 0;
+        console.log(`Using fallback quantity: ${availableQty}`);
+      }
+      
+      const originalPrice = subProduct.originalPrice || productPrice;
+      const finalPrice = subProductDiscount > 0
+        ? originalPrice - (originalPrice * subProductDiscount / 100)
+        : productPrice;
+      
+      // Check stock
+      if (availableQty <= 0) {
+        toast.error(`Sorry, "${productData.name}" is out of stock.`);
+        return;
+      }
+
+      const itemToAdd = {
+        _id: productData._id,
+        _uid: `${productData._id}_no_size`,
+        name: productData.name,
+        image: (subProduct.images?.[0] ? (typeof subProduct.images[0] === 'string' ? subProduct.images[0] : subProduct.images[0].url) : undefined) || "/placeholder.png",
+        price: finalPrice,
+        slug: productData.slug,
+        quantity: 1,
+        qty: 1,
+        originalPrice: originalPrice,
+        discount: subProductDiscount,
+        availableQty: availableQty,
+        // No size property for products without sizes
+      };
+
+      console.log("Adding item to cart (no sizes):", itemToAdd);
+      try {
+        addItem(itemToAdd);
+        toast.success(`${productData.name} added to cart!`);
+      } catch (error) {
+        console.error("Error calling addItem from cart context:", error);
+        toast.error("Failed to add item to cart.");
+      }
+      return;
+    }
+
+    // Original logic for products with valid sizes
     if (selectedSizeIndex === undefined) {
       setShowError(true);
       document.getElementById("sizeGrid")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -339,6 +415,7 @@ const ProductPage = () => {
     console.log("Adding item to cart:", itemToAdd);
     try {
       addItem(itemToAdd);
+      toast.success(`${productData.name} (Size: ${selectedSizeInfo.size}) added to cart!`);
     } catch (error) {
       console.error("Error calling addItem from cart context:", error);
       toast.error("Failed to add item to cart.");
@@ -441,7 +518,7 @@ const ProductPage = () => {
           zoomPaneRef.current.style.backgroundSize = `${containerWidth * ZOOM_FACTOR}px ${containerHeight * ZOOM_FACTOR}px`;
         }
       } else {
-        setIsZooming(false); 
+        setIsZooming(false);
       }
     } else {
       setIsZooming(false);
@@ -451,6 +528,109 @@ const ProductPage = () => {
   const handleMouseLeave = useCallback(() => {
     setIsZooming(false);
   }, []);
+
+  // Check if product has sizes with actual values
+  const hasValidSizes = (p: any) => {
+    return p?.sizes && 
+           p.sizes.length > 0 && 
+           p.sizes.some((size: any) => size && size.size && size.size.trim() !== "");
+  };
+  
+  // Check if product has stock
+  const hasStock = (p: any) => {
+    if (!p) return false;
+    
+    const subProduct = p?.subProducts?.[0];
+    
+    // If product has valid sizes, check if any size has stock
+    if (hasValidSizes(p)) {
+      return p.sizes.some((size: any) => size && size.qty > 0);
+    }
+    
+    // For products without sizes or with empty size values
+    if (subProduct) {
+      // Get the actual quantity from first size if present
+      if (subProduct.sizes && subProduct.sizes.length > 0) {
+        const firstSize = subProduct.sizes[0];
+        if (firstSize && typeof firstSize.qty === 'number') {
+          console.log(`Product ${p.name}: Found size entry with qty = ${firstSize.qty}`);
+          return firstSize.qty > 0;
+        }
+      }
+      
+      // Fallback to subproduct qty/stock fields
+      const qty = subProduct.qty || 0;
+      const stock = subProduct.stock || 0;
+      console.log(`Product ${p.name}: Using subproduct data: Price = ${subProduct.price}, Qty = ${qty}, Stock = ${stock}`);
+      return qty > 0 || stock > 0;
+    }
+    
+    // If no subProduct but the main product has price, assume it's in stock
+    if (p.price) {
+      console.log(`Product ${p.name} has price but no subProduct, assuming in stock`);
+      return true;
+    }
+    
+    return false;
+  };
+  
+  // Get the actual quantity of the product for display - Fixed to properly extract qty from size entry
+  const getProductQuantity = (p: any) => {
+    if (!p) return 0;
+    
+    const subProduct = p?.subProducts?.[0];
+    
+    if (subProduct) {
+      // Check if there's quantity in the first size entry - Top priority for showing quantity
+      if (subProduct.sizes && subProduct.sizes.length > 0) {
+        const firstSize = subProduct.sizes[0];
+        if (firstSize && typeof firstSize.qty === 'number') {
+          console.log(`Product "${p.name}": Found size entry with qty = ${firstSize.qty}`);
+          return firstSize.qty;
+        }
+      }
+      
+      // Fallback to subproduct qty/stock field
+      const qty = subProduct.qty || subProduct.stock || 0;
+      console.log(`Product "${p.name}": Using direct qty = ${qty}`);
+      return qty;
+    }
+    
+    return 0;
+  };
+
+  // --- Automatically add products with empty sizes to cart ---
+  const handleEmptySizeProductAddToCart = useCallback(() => {
+    if (!p || !hasStock(p) || hasValidSizes(p)) return;
+    
+    // Only auto-add products with empty sizes that have stock
+    const subProduct = p.subProducts?.[0];
+    
+    if (!subProduct) return;
+    
+    // Check if product has stock before auto-adding
+    const availableQty = subProduct.qty || subProduct.stock || p.qty || p.stock || 0;
+    if (availableQty <= 0) return;
+    
+    // Auto-add product to cart
+    console.log("Auto-adding product with empty size to cart");
+    handleAddToCart();
+  }, [p, handleAddToCart]);
+  
+  // Run once when product loads
+  useEffect(() => {
+    if (!productData || !productInitialized.current) return;
+    
+    // For products without valid sizes but with stock, automatically add to cart
+    if (!hasValidSizes(productData) && hasStock(productData)) {
+      // Set a small timeout to ensure the UI has updated
+      const timer = setTimeout(() => {
+        handleEmptySizeProductAddToCart();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [productData, productInitialized, handleEmptySizeProductAddToCart]);
 
   // --- Render Logic ---
   if (isLoading) {
@@ -544,7 +724,7 @@ const ProductPage = () => {
                           </thead>
                           <tbody>
                             {productData.details.map((detail: any, index: number) => (
-                              <tr key={detail._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <tr key={detail._id || `detail-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                 <td className="py-3 px-4 text-sm font-medium text-gray-900 border-t border-gray-200">{detail.name}</td>
                                 <td className="py-3 px-4 text-sm text-gray-700 border-t border-gray-200">{detail.value}</td>
                               </tr>
@@ -599,7 +779,7 @@ const ProductPage = () => {
     const selectedSizeData = selectedSizeIndex !== undefined && subProduct?.sizes?.[selectedSizeIndex];
     const selectedSizeInfo = selectedSizeIndex !== undefined && p.sizes?.[selectedSizeIndex];
     const isSelectedSizeChosen = selectedSizeIndex !== undefined;
-    const isSelectedSizeAvailable = selectedSizeData && selectedSizeData.qty > 0;
+    const isSelectedSizeAvailable = selectedSizeIndex !== undefined && selectedSizeData && selectedSizeData.qty > 0;
     
     const displayOriginalPrice = isSelectedSizeChosen && selectedSizeData
       ? (selectedSizeData.originalPrice || selectedSizeData.price || 0)
@@ -792,8 +972,9 @@ const ProductPage = () => {
                 </p>
                 
                 {/* Stock Quantity Indicator */}
-                {isSelectedSizeChosen && selectedSizeData && (
-                  <div className="mt-2">
+                {isSelectedSizeChosen && selectedSizeData ? (
+                  // For products with selected sizes
+                  <>
                     {selectedSizeData.qty > 0 && selectedSizeData.qty <= 5 ? (
                       <p className="text-xs sm:text-sm text-orange-600 font-medium flex items-center">
                         <AlertCircle size={14} className="mr-1" />
@@ -801,117 +982,168 @@ const ProductPage = () => {
                       </p>
                     ) : selectedSizeData.qty > 0 ? (
                       <p className="text-xs sm:text-sm text-green-600 font-medium">
-                        In stock
+                        In stock ({selectedSizeData.qty} available)
                       </p>
                     ) : (
                       <p className="text-xs sm:text-sm text-red-600 font-medium">
                         Out of stock
                       </p>
                     )}
+                  </>
+                ) : !hasValidSizes(p) ? (
+                  // For products without sizes or with empty size values
+                  <>
+                    {(() => {
+                      // Directly use getProductQuantity function to get accurate quantity
+                      const qty = getProductQuantity(p);
+                      console.log(`Display quantity for ${p.name}: ${qty}`); // Debug log
+                      
+                      if (qty > 0 && qty <= 5) {
+                        return (
+                          <p className="text-xs sm:text-sm text-orange-600 font-medium flex items-center">
+                            <AlertCircle size={14} className="mr-1" />
+                            Only {qty} left in stock!
+                          </p>
+                        );
+                      } else if (qty > 0) {
+                        return (
+                          <p className="text-xs sm:text-sm text-green-600 font-medium">
+                            In stock ({qty} available)
+                          </p>
+                        );
+                      } else if (subProduct?.price) {
+                        // If there's a price but no explicit quantity, show "In stock"
+                        return (
+                          <p className="text-xs sm:text-sm text-green-600 font-medium">
+                            In stock
+                          </p>
+                        );
+                      }
+                      
+                      return null;
+                    })()}
+                  </>
+                ) : null}
+              </div>              {/* Size Selection - Only show if sizes are available, not empty, and size value isn't empty */}
+              {p.sizes && p.sizes.length > 0 && p.sizes.some((size: any) => size.size && size.size.trim() !== "") ? (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium">Select Size</h3>
+                    <Button
+                      variant="link"
+                      className="text-sm p-0 h-auto"
+                      onClick={() => setIsSizeGuideOpen(true)}
+                    >
+                      Size Guide
+                    </Button>
                   </div>
-                )}
-              </div>              {/* Size Selection */}
-              <div id="sizeGrid" className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <div className="font-medium text-sm sm:text-base flex items-center">
-                    Select Size
-                    {showError && (
-                      <span className="text-red-500 ml-2 text-xs sm:text-sm">Please select a size</span>
-                    )}
-                  </div>
-                  <Link
-                    href="/size-guide"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-gray-700 hover:text-black"
-                  >
-                    <Info size={14} className="text-gray-600" />
-                    <span className="underline underline-offset-4">Size Guide</span>
-                  </Link>
-                </div>
-                
-                {/* Nike-style Size Grid */}                <div className="grid grid-cols-4 xxs:grid-cols-5 xs:grid-cols-6 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-4 gap-1.5 sm:gap-2">
-                  {p.sizes?.length > 0 ? (
-                    p.sizes.map((s: { size: string }, index: number) => {
-                      const sizeData = p.subProducts?.[0]?.sizes?.[index];
-                      const sizeAvailable = sizeData && sizeData.qty > 0;
-                      const isLowStock = sizeAvailable && sizeData.qty <= 5;
+                  
+                  <div id="sizeGrid" className="grid grid-cols-4 gap-2 mb-3">
+                    {p.sizes.map((size: any, index: number) => {
+                      // Skip rendering empty size options
+                      if (!size.size || size.size.trim() === "") return null;
+                      
+                      const isOutOfStock = size.qty === 0;
+                      const isSelected = selectedSizeIndex === index;
                       
                       return (
                         <button
                           key={index}
-                          disabled={!sizeAvailable}
-                          className={cn(
-                            `rounded-md text-center py-2.5 sm:py-3 px-0.5 font-medium transition-all duration-150 text-xs sm:text-sm`,
-                            selectedSizeIndex === index
-                              ? "bg-gray-900 text-white" 
-                              : sizeAvailable
-                                ? "bg-gray-50 hover:bg-gray-100 text-gray-900 border border-gray-300"
-                                : "bg-gray-50 text-gray-400 cursor-not-allowed border border-gray-200",
-                            isLowStock && selectedSizeIndex !== index && "border-orange-300"
-                          )}
-                          onClick={() => sizeAvailable && handleSizeSelect(index)}
+                          onClick={() => {
+                            if (!isOutOfStock) {
+                              setSelectedSizeIndex(index);
+                              setShowError(false);
+                            }
+                          }}
+                          disabled={isOutOfStock}
+                          className={`
+                            relative p-3 border text-center text-sm font-medium transition-all
+                            ${isSelected 
+                              ? 'border-black bg-black text-white' 
+                              : isOutOfStock
+                                ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'border-gray-300 hover:border-gray-400'
+                            }
+                          `}
                         >
-                          <span>{s.size}</span>
-                          {!sizeAvailable && <span className="block text-[10px] sm:text-xs">Out of Stock</span>}
-                          {isLowStock && <span className="block text-[10px] sm:text-xs text-orange-600">Low Stock</span>}
+                          {size.size}
+                          {isOutOfStock && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-full h-0.5 bg-gray-400 transform rotate-45"></div>
+                            </div>
+                          )}
                         </button>
                       );
-                    })
-                  ) : (
-                    <p className="col-span-full text-sm text-gray-500 py-3 text-center border border-dashed rounded-md">No sizes available.</p>
+                    })}
+                  </div>
+                  
+                  {showError && (
+                    <p className="text-red-500 text-sm mb-3">Please select a size</p>
                   )}
                 </div>
-              </div>
-                {/* Call-to-Action Buttons */}
-              <div className="flex flex-col gap-3">
-                {/* Low Stock Warning */}
-                {isSelectedSizeChosen && isSelectedSizeAvailable && selectedSizeData && selectedSizeData.qty <= 5 && (
-                  <div className="flex items-center justify-center text-orange-600 text-xs sm:text-sm mb-1">
-                    <AlertCircle size={14} className="mr-1" />
-                    <span>Hurry, only {selectedSizeData.qty} left in this size!</span>
-                  </div>
+              ) : null}
+              
+
+              {/* Add to Cart Button */}
+              <div className="mb-6">
+                {/* Alternative rendering for products without sizes or with empty sizes */}
+                {(!hasValidSizes(p)) ? (
+                  <Button
+                    size="lg"
+                    className={cn(
+                      "w-full py-5 sm:py-6 h-auto text-sm sm:text-base rounded-full font-medium transition-all",
+                      hasStock(p)
+                        ? "bg-gray-900 hover:bg-black text-white active:scale-[0.98]" 
+                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                    )}
+                    onClick={handleAddToCart}
+                    disabled={!hasStock(p)}
+                  >
+                    {hasStock(p) 
+                      ? 'Add to Bag' 
+                      : 'Out of Stock'}
+                  </Button>
+                ) : (
+                  /* Original rendering for products with sizes */
+                  <Button
+                    size="lg"
+                    className={cn(
+                      "w-full py-5 sm:py-6 h-auto text-sm sm:text-base rounded-full font-medium transition-all",
+                      (isSelectedSizeChosen && isSelectedSizeAvailable)
+                        ? "bg-gray-900 hover:bg-black text-white active:scale-[0.98]"
+                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                    )}
+                    onClick={handleAddToCart}
+                    disabled={!isSelectedSizeChosen || !isSelectedSizeAvailable}
+                  >
+                    {isSelectedSizeChosen && isSelectedSizeAvailable ? 'Add to Bag' : 'Select Size'}
+                  </Button>
                 )}
-                
-                {/* Add to Bag Button */}
-                <Button
-                  size="lg"
-                  className={cn(
-                    "w-full py-5 sm:py-6 h-auto text-sm sm:text-base rounded-full font-medium transition-all",
-                    isSelectedSizeChosen && isSelectedSizeAvailable
-                      ? "bg-gray-900 hover:bg-black text-white active:scale-[0.98]"
-                      : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                  )}
-                  onClick={handleAddToCart}
-                  disabled={!isSelectedSizeChosen || !isSelectedSizeAvailable}
-                >
-                  {isSelectedSizeChosen && isSelectedSizeAvailable ? 'Add to Bag' : 'Select Size'}
-                </Button>
-                
-                {/* Favorite Button */}
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className={cn(
-                    "w-full py-4 sm:py-5 h-auto text-sm sm:text-base rounded-full border font-medium transition-all flex items-center justify-center gap-2",
-                    isInWishlist
-                      ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                      : "border-gray-300 hover:border-gray-400 text-gray-900"
-                  )}
-                  onClick={handleWishlistToggle}
-                  disabled={!productData || isWishlistLoading}
-                >
-                  <Heart
-                    size={18}
-                    fill={isInWishlist ? "currentColor" : "none"}
-                    className={cn(isInWishlist && "text-red-600")}
-                  />
-                  {isWishlistLoading
-                    ? 'Updating...'
-                    : isInWishlist ? 'Favorite' : 'Favorite'
-                  }
-                </Button>
               </div>
+              
+              {/* Favorite Button */}
+              <Button
+                variant="outline"
+                size="lg"
+                className={cn(
+                  "w-full py-4 sm:py-5 h-auto text-sm sm:text-base rounded-full border font-medium transition-all flex items-center justify-center gap-2",
+                  isInWishlist
+                    ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                    : "border-gray-300 hover:border-gray-400 text-gray-900"
+                )}
+                onClick={handleWishlistToggle}
+                disabled={!productData || isWishlistLoading}
+              >
+                <Heart
+                  size={18}
+                  fill={isInWishlist ? "currentColor" : "none"}
+                  className={cn(isInWishlist && "text-red-600")}
+                />
+                {isWishlistLoading
+                  ? 'Updating...'
+                  : isInWishlist ? 'Favorite' : 'Favorite'
+                }
+              </Button>
 
               {/* Product Details with Modified Tabs - Removed Long Description Tab */}
               <div className="border-t pt-5 sm:pt-6">

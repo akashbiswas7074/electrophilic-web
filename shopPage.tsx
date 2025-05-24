@@ -145,7 +145,8 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       name: product.name || '',
       description: product.description || '',
       price: typeof product.price === 'number' ? product.price : 
-             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.price) || 0,
+             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.price) || 
+             (product.subProducts && product.subProducts[0]?.price) || 0,
       discount: typeof product.discount === 'number' ? product.discount : 0,
       image: getImageUrl(product),
       images: [], // We don't need full image array for product cards
@@ -158,7 +159,9 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       brandId: brandInfo.id,
       brandName: brandInfo.name,
       stock: typeof product.stock === 'number' ? product.stock : 
-             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.qty) || 0,
+             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.qty) || 
+             (product.subProducts && product.subProducts[0]?.stock) ||
+             (product.subProducts && product.subProducts[0]?.qty) || 0,
       isOnSale: isOnSale,
       isBestseller: isBestseller,
       isNew: isNew,

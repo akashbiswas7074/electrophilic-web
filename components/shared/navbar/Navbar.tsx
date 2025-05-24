@@ -139,9 +139,9 @@ const Navbar = () => {
                 <Link href="/wishlist" passHref>
                   <button
                     className="relative p-2.5 hover:bg-black/5 rounded-full transition-all duration-300
-                      active:scale-95 hover:shadow-sm text-gray-800"
+                      active:scale-95 hover:shadow-sm text-gray-800 group"
                   >
-                    <Heart className="h-[22px] w-[22px]" />
+                    <Heart className={`h-[22px] w-[22px] ${!isWishlistLoading && wishlist.length > 0 ? 'text-red-500 fill-red-500' : 'group-hover:text-red-500 transition-colors duration-300'}`} />
                     {!isWishlistLoading && wishlist.length > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-600 text-white 
                         text-xs font-medium rounded-full h-5 w-5 flex items-center justify-center
@@ -294,14 +294,14 @@ const Navbar = () => {
                 <Link
                   href="/wishlist"
                   className="flex items-center px-6 py-3 text-lg text-gray-700 hover:bg-gray-100 
-                    transition-all duration-300 active:scale-[0.98]"
+                    transition-all duration-300 active:scale-[0.98] group"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <Heart className="h-5 w-5 mr-3" />
+                  <Heart className={`h-5 w-5 mr-3 ${!isWishlistLoading && wishlist.length > 0 ? 'text-red-500 fill-red-500' : 'group-hover:text-red-500'}`} />
                   Wishlist
                   {!isWishlistLoading && wishlist.length > 0 && (
                     <span className="ml-2 bg-red-600 text-white text-xs font-medium rounded-full h-5 w-5 
-                      flex items-center justify-center">
+                      flex items-center justify-center animate-in zoom-in-50">
                       {wishlist.length}
                     </span>
                   )}

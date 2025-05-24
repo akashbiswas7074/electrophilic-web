@@ -140,26 +140,45 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       ? product.subProducts[0] || {}
       : {};
 
-    // --- Sizes and Price Calculation --- 
+    // --- Enhanced Sizes and Price Calculation (Optional Sizes) --- 
     let sizes: { size: string; price: number; qty: number }[] = [];
     let price = 0;
+    let defaultQuantity = 0;
+    
     // Check if subProduct.sizes exists and is an array
-    if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+    if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
+      // Process sizes if available
       sizes = subProduct.sizes.map((size: any) => ({
         size: String(size?.size || "N/A"),
         price: parseFloat(size?.price) || 0,
         qty: parseInt(size?.qty) || 0
       })).filter((size: any) => size.size !== "N/A");
-    }
-    // Calculate price based on sizes or fallback to subProduct/product price
-    if (sizes.length > 0) {
-      const validPrices = sizes.map(s => s.price).filter(p => !isNaN(p) && p > 0);
-      price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
+      
+      // Calculate price based on sizes
+      if (sizes.length > 0) {
+        const validPrices = sizes.map(s => s.price).filter(p => !isNaN(p) && p > 0);
+        price = validPrices.length > 0 ? Math.min(...validPrices) : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
+        // Calculate total quantity from all sizes
+        defaultQuantity = sizes.reduce((total, size) => total + size.qty, 0);
+      }
     } else {
-      // Ensure prices are numbers before using parseFloat
+      // No sizes available - use direct product/subProduct data
       const subProductPrice = typeof subProduct.price === 'number' || typeof subProduct.price === 'string' ? parseFloat(subProduct.price) : 0;
       const productPrice = typeof product.price === 'number' || typeof product.price === 'string' ? parseFloat(product.price) : 0;
+      
       price = subProductPrice || productPrice || 0;
+      
+      // Use direct quantity/stock from product or subProduct
+      const subProductQty = typeof subProduct.qty === 'number' ? subProduct.qty : 
+                           typeof subProduct.qty === 'string' ? parseInt(subProduct.qty) : 0;
+      const subProductStock = typeof subProduct.stock === 'number' ? subProduct.stock : 
+                             typeof subProduct.stock === 'string' ? parseInt(subProduct.stock) : 0;
+      const productStock = typeof product.stock === 'number' ? product.stock : 
+                          typeof product.stock === 'string' ? parseInt(product.stock) : 0;
+      const productQty = typeof product.qty === 'number' ? product.qty : 
+                        typeof product.qty === 'string' ? parseInt(product.qty) : 0;
+      
+      defaultQuantity = subProductQty || subProductStock || productStock || productQty || 0;
     }
 
     // --- Image Handling --- 

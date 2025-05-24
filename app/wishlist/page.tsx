@@ -40,13 +40,27 @@ const WishlistPage = () => {
     }
   }, [status, router]);
 
-  // Initial fetch is handled by the context provider
-  // We might want to trigger a refetch if the user navigates here explicitly
+  // Show debug info in development - useful for troubleshooting
   useEffect(() => {
-      if (status === 'authenticated') {
-          // Optional: Force refresh if needed, but context should handle initial load
-          // fetchWishlist();
-      }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('WishlistPage: Current state', { 
+        wishlistItems, 
+        isLoading, 
+        error, 
+        authStatus: status 
+      });
+    }
+  }, [wishlistItems, isLoading, error, status]);
+
+  // Initial fetch is handled by the context provider
+  // But we also trigger a refetch when the user navigates to this page
+  useEffect(() => {
+    if (status === 'authenticated') {
+      console.log('WishlistPage: User is authenticated, fetching wishlist...');
+      fetchWishlist();
+    } else {
+      console.log('WishlistPage: User not yet authenticated');
+    }
   }, [status, fetchWishlist]);
 
   // Handle item removal using the context function
@@ -142,12 +156,12 @@ const WishlistPage = () => {
             {/* Product Image Link */}
             <Link href={`/product/${item.slug ?? '#'}`} className="block aspect-square relative bg-gray-100">
               <Image
-                src={item.image || '/images/placeholder-product.png'} // Use consistent placeholder
+                src={item.image || '/placeholder.png'} // Use available placeholder in your project
                 alt={item.name ?? 'Product Image'}
                 fill
                 sizes="(max-width: 640px) 90vw, (max-width: 768px) 45vw, (max-width: 1024px) 30vw, 23vw"
                 className="object-cover transition-transform duration-300 group-hover:scale-105"
-                onError={(e) => { e.currentTarget.src = '/images/placeholder-product.png'; }} // Fallback on error
+                onError={(e) => { e.currentTarget.src = '/placeholder.png'; }} // Fallback on error
               />
                {/* Optional: Discount Badge */}
                {/* {item.discount && item.discount > 0 && ... } */}

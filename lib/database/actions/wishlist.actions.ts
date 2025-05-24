@@ -48,10 +48,12 @@ export async function getWishlistItems(userId: string) {
     const rawWishlist = await Wishlist.findOne({ user: userId })
       .populate({
         path: "items.product",
-        model: Product, // Explicitly specify the model for population
-        select: "name slug subProducts", // Select necessary fields from Product
+        model: Product,
+        select: "name slug subProducts price originalPrice discount", // Include more fields for proper display
       })
-      .lean(); // Use lean for plain JS objects, faster reads
+      .lean();
+
+    console.log("Raw wishlist from DB:", JSON.stringify(rawWishlist, null, 2));
 
     if (!rawWishlist) {
       console.log(`No wishlist found for user: ${userId}`);
@@ -59,7 +61,7 @@ export async function getWishlistItems(userId: string) {
     }
 
     // Cast the lean object to your IWishlist interface
-    const wishlist = rawWishlist as unknown as IWishlist; // Replace IWishlist with your actual interface name if different
+    const wishlist = rawWishlist as unknown as IWishlist;
 
     if (!wishlist.items || wishlist.items.length === 0) {
       console.log(`Wishlist found but is empty for user: ${userId}`);
@@ -81,23 +83,41 @@ export async function getWishlistItems(userId: string) {
         const firstSubProduct = item.product.subProducts?.[0];
         const firstSize = firstSubProduct?.sizes?.[0];
 
-        return {
+        // Extract image URL properly, handling both string and object formats
+        let imageUrl = "/placeholder.png"; // Update to use correct placeholder path
+        
+        if (firstSubProduct?.images && firstSubProduct.images.length > 0) {
+          const firstImage = firstSubProduct.images[0];
+          if (typeof firstImage === 'string') {
+            imageUrl = firstImage;
+          } else if (firstImage?.url) {
+            imageUrl = firstImage.url;
+          }
+        }
+        
+        // Calculate price based on available data
+        let price = firstSize?.price;
+        if (!price) {
+          price = firstSubProduct?.price || item.product.price || 0;
+        }
+
+        const mappedItem = {
           _id: item.product._id.toString(), // Ensure ID is a string
           name: item.product.name ?? "Product Name Unavailable",
           slug: item.product.slug ?? "#",
-          // Provide a default placeholder image
-          image: firstSubProduct?.images?.[0]?.url ?? "/images/placeholder-product.png",
-          price: firstSize?.price ?? 0,
-          originalPrice: firstSize?.originalPrice, // Can be undefined
-          discount: firstSubProduct?.discount, // Can be undefined
+          image: imageUrl,
+          price: price,
+          originalPrice: firstSize?.originalPrice || firstSubProduct?.originalPrice || item.product.originalPrice, 
+          discount: firstSubProduct?.discount || item.product.discount, 
           addedAt: item.addedAt, // Keep the date object or format if needed
         };
+        
+        console.log("Mapped wishlist item:", mappedItem);
+        return mappedItem;
       })
       .filter(Boolean); // Remove any null items resulting from population issues
 
-    console.log(`Mapped ${mappedItems.length} wishlist items for user ${userId}.`);
-    // Uncomment for detailed logging if needed:
-    // console.log(`Mapped wishlist items for user ${userId}:`, safeJsonStringify(mappedItems));
+    console.log(`Final mapped wishlist items (${mappedItems.length}):`, JSON.stringify(mappedItems, null, 2));
     return mappedItems;
 
   } catch (error: any) {

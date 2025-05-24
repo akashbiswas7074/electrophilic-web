@@ -38,12 +38,14 @@ type CartActions = {
 
 // Helper function to generate _uid
 const generateUid = (item: { _id: string; size?: string }): string => {
-  if (!item || !item._id || item.size === undefined || item.size === null) {
-    console.error("Cannot generate UID: Missing _id or size", item);
+  if (!item || !item._id) {
+    console.error("Cannot generate UID: Missing _id", item);
     // Fallback UID, though this indicates an issue upstream
-    return `${item?._id || 'unknown'}_${Date.now()}`;
+    return `unknown_${Date.now()}`;
   }
-  return `${item._id}_${item.size}`;
+  // Handle items without size by using a default value
+  const sizeValue = item.size !== undefined && item.size !== null ? item.size : 'default';
+  return `${item._id}_${sizeValue}`;
 };
 
 // Debounced save function (outside the store definition)

@@ -20,13 +20,22 @@ const safeToString = (value: any): string => {
   }
   // Avoid rendering complex objects directly
   if (typeof value === 'object') {
-     // Attempt to get a meaningful string representation if possible
-     if (value.toString && value.toString !== Object.prototype.toString) {
-       return value.toString();
-     }
-     // Fallback for generic objects - log error and return placeholder
-     console.error("Attempted to render non-primitive value:", value);
-     return "[Object]"; 
+    // Check for empty objects first
+    if (Object.keys(value).length === 0) {
+      return ""; // Return empty string for empty objects
+    }
+    // Attempt to get a meaningful string representation if possible
+    if (value.toString && value.toString !== Object.prototype.toString) {
+      try {
+        return value.toString();
+      } catch (err) {
+        console.error("Error calling toString():", err);
+        return "[Object]";
+      }
+    }
+    // Fallback for generic objects - log error and return placeholder
+    console.error("Attempted to render non-primitive value:", value);
+    return "[Object]"; 
   }
   return ""; // Fallback for other types
 };
@@ -101,6 +110,10 @@ const CartSheetItems = ({ product }: { product: any }) => {
   const productId = safeToString(product._id); // Use helper
   const productPrice = Number(product.price || 0); // Ensure price is a number
 
+  // Pre-compute any derived data to avoid calculations in render
+  const formattedPrice = (productPrice * currentQuantity).toFixed(2);
+  const imageUrl = getImageUrl();
+
   return (
     <div className={`relative ${isUpdating || isRemoving ? 'opacity-70 pointer-events-none' : ''}`}>
       {(isUpdating || isRemoving) && (
@@ -113,7 +126,7 @@ const CartSheetItems = ({ product }: { product: any }) => {
         className="flex items-start space-x-3 sm:space-x-4 border-b pb-3"
       >
         <Image
-          src={getImageUrl()}
+          src={imageUrl}
           alt={productName || 'Product Image'} // Use safe string
           width={70} 
           height={70}
@@ -159,7 +172,7 @@ const CartSheetItems = ({ product }: { product: any }) => {
             </div>
             
             <p className="font-semibold text-sm sm:text-base whitespace-nowrap ml-2">
-              ₹{(productPrice * currentQuantity).toFixed(2)} 
+              ₹{formattedPrice} 
             </p>
           </div>
         </div>

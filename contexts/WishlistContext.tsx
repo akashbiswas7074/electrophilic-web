@@ -11,6 +11,8 @@ interface WishlistItem {
   slug?: string;
   image?: string;
   price?: number;
+  originalPrice?: number;
+  discount?: number;
 }
 
 interface WishlistContextType {
@@ -18,7 +20,7 @@ interface WishlistContextType {
   isLoading: boolean;
   error: string | null;
   fetchWishlist: () => Promise<void>;
-  toggleWishlist: (productId: string) => Promise<void>;
+  toggleWishlist: (productId: string, productDetails?: any) => Promise<void>;
   isInWishlist: (productId: string) => boolean;
 }
 
@@ -31,59 +33,94 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [error, setError] = useState<string | null>(null);
 
   const fetchWishlist = useCallback(async () => {
+    // Clear previous states
+    setError(null);
+    
     if (status !== "authenticated" || !session?.user?.id) {
-      setWishlist([]); // Clear wishlist if not logged in
+      console.log("WishlistContext: User not authenticated, clearing wishlist");
+      setWishlist([]);
       setIsLoading(false);
-      setError(null);
       return;
     }
-
-    // Don't check wishlist.length here as it causes re-renders
-    if (isLoading) return;
-
+    
     setIsLoading(true);
-    setError(null);
-    console.log("WishlistContext: Fetching wishlist...");
+    console.log("WishlistContext: Fetching wishlist items...");
 
     try {
-      const response = await fetch("/api/wishlist");
+      const response = await fetch("/api/wishlist", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch wishlist: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
+      console.log("WishlistContext: API response:", data);
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to fetch wishlist data");
+      if (!data.success) {
+        throw new Error(data.message || "Failed to fetch wishlist");
       }
 
+      // Ensure wishlist is an array
       if (Array.isArray(data.wishlist)) {
-        setWishlist(data.wishlist);
-        console.log(`WishlistContext: Fetched ${data.wishlist.length} items.`);
+        console.log(`WishlistContext: Successfully fetched ${data.wishlist.length} items`);
+        
+        // Map the items to ensure all required properties are present
+        const mappedItems = data.wishlist.map((item: any) => ({
+          _id: item._id || "",
+          name: item.name || "Product",
+          slug: item.slug || "#",
+          image: item.image || "/placeholder.png",
+          price: typeof item.price === 'number' ? item.price : 0,
+          originalPrice: item.originalPrice,
+          discount: item.discount,
+        }));
+        
+        setWishlist(mappedItems);
       } else {
-        console.warn("WishlistContext: API response format unexpected:", data);
+        console.warn("WishlistContext: Unexpected response format", data);
         setWishlist([]);
-        setError("Could not load wishlist items due to unexpected format.");
       }
-    } catch (err: any) {
-      console.error("WishlistContext: Error fetching wishlist:", err);
-      setError(err.message || "An unexpected error occurred while fetching wishlist.");
-      setWishlist([]); // Clear wishlist on error
+    } catch (error: any) {
+      console.error("WishlistContext: Error fetching wishlist:", error);
+      setError(error.message || "Failed to load wishlist");
+      // Don't clear wishlist on error to maintain offline experience
     } finally {
       setIsLoading(false);
     }
-  }, [session?.user?.id, status, isLoading]); // Remove wishlist.length from dependencies
+  }, [session?.user?.id, status]);
 
   // Fetch wishlist when authentication status changes to authenticated
   useEffect(() => {
     if (status === "authenticated") {
+      console.log("Authentication status changed to authenticated, fetching wishlist");
+      // Force a fresh fetch when authentication status changes
+      setIsLoading(true); // Set loading state before fetch
       fetchWishlist();
     } else if (status === "unauthenticated") {
       setWishlist([]); // Clear wishlist on logout
       setIsLoading(false);
       setError(null);
     }
-    // Intentionally not including fetchWishlist in deps to avoid loops, control manually
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  const toggleWishlist = useCallback(async (productId: string) => {
+  // Separate effect to handle the initial fetch
+  useEffect(() => {
+    // This will run only once when the component mounts
+    if (status === "authenticated" && wishlist.length === 0 && !isLoading && !error) {
+      console.log("Initial wishlist fetch on component mount");
+      setIsLoading(true);
+      fetchWishlist();
+    }
+  }, []);
+
+  const toggleWishlist = useCallback(async (productId: string, productDetails: any = null) => {
     if (status !== "authenticated" || !session?.user?.id) {
       toast.error("Please log in first.");
       throw new Error("User not authenticated");
@@ -92,11 +129,26 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
     const isInWishlistCurrently = wishlist.some(item => item._id === productId);
     const method = isInWishlistCurrently ? "DELETE" : "POST";
     const url = isInWishlistCurrently ? `/api/wishlist?productId=${productId}` : "/api/wishlist";
+    
+    // Create optimistic update with product details if available
+    let newItem: WishlistItem = { _id: productId };
+    if (productDetails) {
+      newItem = {
+        _id: productId,
+        name: productDetails.name || "Product",
+        slug: productDetails.slug || "#",
+        image: productDetails.image || "/placeholder.png",
+        price: typeof productDetails.price === 'number' ? productDetails.price : 0,
+        originalPrice: productDetails.originalPrice,
+        discount: productDetails.discount
+      };
+    }
+    
     const optimisticNewWishlist = isInWishlistCurrently
       ? wishlist.filter(item => item._id !== productId)
-      : [...wishlist, { _id: productId }]; // Add a placeholder
+      : [...wishlist, newItem];
 
-    // Optimistic UI update
+    // Optimistic UI update immediately
     setWishlist(optimisticNewWishlist);
 
     try {
@@ -105,26 +157,22 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include',
         ...(method === "POST" && { body: JSON.stringify({ productId }) }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || `Failed to ${isInWishlistCurrently ? 'remove' : 'add'} item`);
+        throw new Error(result.message || `Failed to ${isInWishlistCurrently ? 'remove from' : 'add to'} wishlist`);
       }
 
-      toast.success(result.message || `Item ${isInWishlistCurrently ? 'removed' : 'added'}.`);
-      // Optional: Refetch to ensure consistency, or rely on optimistic update
-      // await fetchWishlist(); // Could cause flicker, use if optimistic fails often
-      // If API returns the updated item/wishlist, update state with that instead
-      if (method === 'POST' && result.item) { // Assuming API returns added item
-         setWishlist(current => current.map(item => item._id === productId ? result.item : item));
-      } else if (method === 'DELETE') {
-         // Already handled optimistically
-      } else {
-         // Fallback refetch if needed
-         await fetchWishlist();
+      toast.success(result.message || `Item ${isInWishlistCurrently ? 'removed from' : 'added to'} wishlist`);
+      
+      // No need to refetch the whole wishlist - we've already updated the UI optimistically
+      // Only refetch if something unexpected happened
+      if (result.needsRefresh) {
+        fetchWishlist();
       }
 
     } catch (error: any) {
@@ -132,9 +180,9 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
       toast.error(error.message || "Wishlist update failed.");
       // Revert optimistic update on failure
       setWishlist(wishlist);
-      throw error; // Re-throw for the calling component to handle if needed
+      throw error;
     }
-  }, [session?.user?.id, status, wishlist, fetchWishlist]); // Include fetchWishlist
+  }, [session?.user?.id, status, wishlist, fetchWishlist]);
 
   const isInWishlist = useCallback((productId: string): boolean => {
       return wishlist.some(item => item._id === productId);

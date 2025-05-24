@@ -19,6 +19,48 @@ const getFirstSubProductInfo = (product: any): { image: string; discount: number
   };
 };
 
+// Get price information with optional sizes support
+function getPriceInfo(product: any) {
+  const subProduct = product.subProducts?.[0];
+  if (!subProduct) return { price: 0, originalPrice: 0 };
+  
+  let price = 0;
+  let originalPrice = 0;
+  
+  // Check if product has sizes
+  if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
+    // Use first size for pricing
+    const firstSize = subProduct.sizes[0];
+    originalPrice = firstSize.originalPrice || firstSize.price || 0;
+    price = subProduct.discount > 0 
+      ? originalPrice - (originalPrice * subProduct.discount / 100)
+      : originalPrice;
+  } else {
+    // Use direct price fields for products without sizes
+    originalPrice = subProduct.originalPrice || subProduct.price || product.price || 0;
+    price = subProduct.discount > 0 
+      ? originalPrice - (originalPrice * subProduct.discount / 100)
+      : originalPrice;
+  }
+  
+  return { price, originalPrice };
+}
+
+// Get quantity information with optional sizes support
+function getQuantityInfo(product: any) {
+  const subProduct = product.subProducts?.[0];
+  if (!subProduct) return 0;
+  
+  // Check if product has sizes
+  if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
+    // Sum up quantities from all sizes
+    return subProduct.sizes.reduce((total: number, size: any) => total + (size.qty || 0), 0);
+  } else {
+    // Use direct quantity fields for products without sizes
+    return subProduct.qty || subProduct.stock || product.qty || product.stock || 0;
+  }
+}
+
 // get all top selling products
 export const getTopSellingProducts = unstable_cache(
   async () => {

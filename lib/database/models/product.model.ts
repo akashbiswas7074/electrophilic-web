@@ -100,6 +100,19 @@ const productSchema = new mongoose.Schema(
             },
           },
         ],
+        // Direct price/quantity fields for products without sizes
+        price: {
+          type: Number,
+          required: false, // Optional for products with sizes
+        },
+        qty: {
+          type: Number,
+          required: false, // Optional for products with sizes
+        },
+        stock: {
+          type: Number,
+          required: false, // Optional for products with sizes
+        },
         discount: {
           type: Number,
           default: 0,
@@ -110,6 +123,19 @@ const productSchema = new mongoose.Schema(
         },
       },
     ],
+    // Product-level direct fields for products without sizes
+    price: {
+      type: Number,
+      required: false,
+    },
+    qty: {
+      type: Number,
+      required: false,
+    },
+    stock: {
+      type: Number,
+      required: false,
+    },
     featured: {
       type: Boolean,
       default: false,

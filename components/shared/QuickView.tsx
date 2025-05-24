@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ interface QuickViewProps {
     description?: string;
     stock?: number;
     brandName?: string;
+    sizes?: { size: string; inStock: boolean }[]; // Added sizes prop
   };
   children: React.ReactNode;
 }
@@ -26,17 +27,32 @@ interface QuickViewProps {
 const QuickView = ({ product, children }: QuickViewProps) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(product.image);
+  const [selectedSize, setSelectedSize] = useState<string>('');
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   
+  // Set default size if product has sizes
+  useEffect(() => {
+    if (product.sizes && product.sizes.length > 0) {
+      setSelectedSize(product.sizes[0].size);
+    }
+  }, [product.sizes]);
+  
   const handleAddToCart = () => {
+    // For products with sizes, require size selection
+    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
+      alert('Please select a size before adding to cart.');
+      return;
+    }
+    
     addItem({
       _id: product.id,
-      _uid: `${product.id}_default_default`,
+      _uid: `${product.id}_${selectedSize || 'default'}_default`,
       name: product.name,
       price: product.price,
       image: product.image,
       quantity: quantity,
+      size: selectedSize || undefined, // Only include size if one is selected
     });
   };
   
@@ -149,6 +165,32 @@ const QuickView = ({ product, children }: QuickViewProps) => {
                 {product.description || "No description available for this product."}
               </p>
             </div>
+            
+            {/* Size Selector - Only for products with sizes */}
+            {product.sizes && product.sizes.length > 0 && (
+              <div className="mb-4">
+                <span className="block text-sm font-medium text-gray-700 mb-2">Size:</span>
+                <div className="flex flex-wrap gap-2">
+                  {product.sizes.map((sizeOption) => (
+                    <button 
+                      key={sizeOption.size}
+                      onClick={() => setSelectedSize(sizeOption.size)}
+                      className={`px-4 py-2 border rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                        selectedSize === sizeOption.size 
+                          ? 'bg-blue-500 text-white border-blue-500' 
+                          : 'bg-white text-gray-700 border-gray-300'
+                      } ${!sizeOption.inStock ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!sizeOption.inStock}
+                    >
+                      {sizeOption.size}
+                      {!sizeOption.inStock && (
+                        <span className="text-red-500 text-xs font-semibold">(Out of stock)</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Quantity Selector */}
             <div className="flex items-center mb-6">

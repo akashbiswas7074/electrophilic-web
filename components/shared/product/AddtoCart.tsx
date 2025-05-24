@@ -88,10 +88,18 @@ export default function AddToCart({
       toast.error("Invalid product data");
       return;
     }
-    if (!selectedSize) {
+    
+    // Check if product has sizes - if it does, require size selection
+    const productHasSizes = product.subProducts && 
+                           product.subProducts.length > 0 && 
+                           product.subProducts[0]?.sizes && 
+                           product.subProducts[0].sizes.length > 0;
+    
+    if (productHasSizes && !selectedSize) {
       toast.warning("Please select a size.");
       return;
     }
+    
     if (selectedStyle === undefined || selectedStyle === null) { // Check for undefined/null style
       toast.warning("Please select a style/color.");
       return;
@@ -101,7 +109,7 @@ export default function AddToCart({
     const toastId = toast.loading("Adding item to cart...");
 
     try {
-      console.log(`Adding ${product.name} (Size: ${selectedSize}, Style: ${selectedStyle}) to cart`);
+      console.log(`Adding ${product.name} ${productHasSizes ? `(Size: ${selectedSize}, Style: ${selectedStyle})` : `(Style: ${selectedStyle})`} to cart`);
 
       // Prepare item for the Zustand store
       const cartItem = {
@@ -112,7 +120,7 @@ export default function AddToCart({
         image: getPrimaryImage(), // Use the primary image
         qty: quantity, // Pass the selected quantity
         quantity: quantity, // Keep both qty and quantity for compatibility
-        size: selectedSize,
+        size: productHasSizes ? selectedSize : undefined, // Only include size if product has sizes
         style: selectedStyle, // Pass the selected style
         // _uid will be generated in the store if not provided
       };
@@ -166,7 +174,7 @@ export default function AddToCart({
 
       <Button
         onClick={handleAddToCart}
-        disabled={isAdding || !selectedSize || availableStock < 1}
+        disabled={isAdding || availableStock < 1 || (product.subProducts && product.subProducts.length > 0 && product.subProducts[0]?.sizes && product.subProducts[0].sizes.length > 0 && !selectedSize)}
         variant={variant === 'default' ? 'default' : 'secondary'}
         size={size === 'default' ? 'default' : 'sm'}
         className="w-full"

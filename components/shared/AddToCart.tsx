@@ -17,6 +17,8 @@ interface AddToCartProps {
     image?: string;
     images?: { url: string }[];
     quantity?: number; // This might represent total stock, not per size
+    qty?: number; // Add qty property
+    stock?: number; // Add stock property
     // Add other necessary product fields if needed by the cart
     slug?: string; // Include slug if needed by cart/context
     sizes?: any[]; // Include sizes if needed for price calculation here (though better done on product page)
@@ -61,72 +63,102 @@ export default function AddToCart({
       toast.error("Invalid product data");
       return;
     }
-    if (!selectedSize || selectedSizeIndex === undefined) {
+    
+    // Only require size selection if product has sizes
+    if (product.subProducts?.[0]?.sizes?.length > 0 && !selectedSize) {
       toast.warning("Please select a size.");
       // Optionally scroll to size selection
       document.getElementById("sizeGrid")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
-    // --- Recalculate Price & Get Available Qty for the selected size ---
-    // This logic should ideally mirror the product page calculation
-    const subProduct = product.subProducts?.[0];
-    const sizeData = subProduct?.sizes?.[selectedSizeIndex];
-
-    if (!subProduct || !sizeData) {
-        toast.error("Could not find details for the selected size.");
-        return;
-    }
-
-    const subProductDiscount = subProduct.discount || 0;
-    const sizeOriginalPrice = sizeData.originalPrice || sizeData.price || 0;
-    const sizeFinalPrice = subProductDiscount > 0
-        ? sizeOriginalPrice - (sizeOriginalPrice * subProductDiscount / 100)
-        : sizeOriginalPrice;
-    const availableQuantity = sizeData.qty || 0;
-    // --- End Recalculation ---
-
-    if (availableQuantity < quantity) {
-      toast.error(`Sorry, "${product.name}" (Size: ${selectedSize}) has insufficient quantity (requested ${quantity}, only ${availableQuantity} available).`);
-      return;
-    }
-
     setIsAdding(true);
     const toastId = toast.loading("Adding item to cart...");
 
+    // --- Recalculate Price & Get Available Qty for the selected size or product ---
+    const subProduct = product.subProducts?.[0];
+    
+    if (!subProduct) {
+        toast.error("Product configuration is invalid.", { id: toastId });
+        setIsAdding(false);
+        return;
+    }
+
     try {
-      console.log(`Adding ${product.name} (Size: ${selectedSize}) to cart`);
+      // Handle products with sizes
+      if (subProduct.sizes?.length > 0 && selectedSizeIndex !== undefined) {
+        const sizeData = subProduct.sizes[selectedSizeIndex];
+        
+        if (!sizeData) {
+            toast.error("Could not find details for the selected size.", { id: toastId });
+            return;
+        }
 
-      // Prepare item for the Zustand store
-      const cartItem = {
-        // Base product info
-        _id: product._id,
-        name: product.name,
-        slug: product.slug, // Include slug if needed
+        const subProductDiscount = subProduct.discount || 0;
+        const sizeOriginalPrice = sizeData.originalPrice || sizeData.price || 0;
+        const sizeFinalPrice = subProductDiscount > 0
+            ? sizeOriginalPrice - (sizeOriginalPrice * subProductDiscount / 100)
+            : sizeOriginalPrice;
+        const availableQuantity = sizeData.qty || 0;
 
-        // Use calculated price for the selected size
-        price: sizeFinalPrice,
-        originalPrice: sizeOriginalPrice, // Include original price for potential savings display
-        discount: subProductDiscount, // Include discount
+        if (availableQuantity < quantity) {
+          toast.error(`Sorry, "${product.name}" (Size: ${selectedSize}) has insufficient quantity (requested ${quantity}, only ${availableQuantity} available).`, { id: toastId });
+          return;
+        }
 
-        image: getPrimaryImage(),
+        // Prepare cart item for products with sizes
+        const cartItem = {
+          _id: product._id,
+          name: product.name,
+          slug: product.slug,
+          price: sizeFinalPrice,
+          originalPrice: sizeOriginalPrice,
+          discount: subProductDiscount,
+          image: getPrimaryImage(),
+          size: selectedSize,
+          quantity: quantity,
+          qty: quantity,
+          availableQty: availableQuantity
+        };
 
-        // Variant/Selection info
-        size: selectedSize, // The size string ("M", "L")
+        addToCartStore(cartItem);
+        toast.success(`${product.name} added to cart!`, { id: toastId });
+      } 
+      // Handle products without sizes
+      else {
+        const subProductDiscount = subProduct.discount || 0;
+        const directPrice = subProduct.price || product.price || 0;
+        const originalPrice = subProduct.originalPrice || directPrice;
+        const finalPrice = subProductDiscount > 0
+            ? originalPrice - (originalPrice * subProductDiscount / 100)
+            : directPrice;
+        const availableQuantity = subProduct.qty || subProduct.stock || product.qty || product.stock || 0;
 
-        // Quantity
-        quantity: quantity,
-        qty: quantity,
+        if (availableQuantity < quantity) {
+          toast.error(`Sorry, "${product.name}" has insufficient quantity (requested ${quantity}, only ${availableQuantity} available).`, { id: toastId });
+          return;
+        }
 
-        // Add available quantity information for cart validation
-        availableQty: availableQuantity
-      };
+        // Prepare cart item for products without sizes
+        const cartItem = {
+          _id: product._id,
+          name: product.name,
+          slug: product.slug,
+          price: finalPrice,
+          originalPrice: originalPrice,
+          discount: subProductDiscount,
+          image: getPrimaryImage(),
+          quantity: quantity,
+          qty: quantity,
+          availableQty: availableQuantity
+          // No size field for products without sizes
+        };
 
-      // Call the Zustand store action
-      addToCartStore(cartItem);
-      toast.success(`${product.name} added to cart!`, { id: toastId });
+        addToCartStore(cartItem);
+        toast.success(`${product.name} added to cart!`, { id: toastId });
+      }
+
       setQuantity(1); // Reset quantity after adding
-
     } catch (error) {
       console.error("Error adding to cart:", error);
       toast.error("Failed to add item to cart. Please try again.", { id: toastId });
@@ -135,10 +167,20 @@ export default function AddToCart({
     }
   };
 
-  // Determine max quantity based on available stock for the selected size
-  const maxQuantity = selectedSizeIndex !== undefined && product.subProducts?.[0]?.sizes
-    ? product.subProducts[0].sizes[selectedSizeIndex]?.qty || 0
-    : 0;
+  // Determine max quantity based on available stock for the selected size or product
+  const maxQuantity = (() => {
+    const subProduct = product.subProducts?.[0];
+    if (!subProduct) return 0;
+    
+    // For products with sizes
+    if (subProduct.sizes?.length > 0 && selectedSizeIndex !== undefined) {
+      return subProduct.sizes[selectedSizeIndex]?.qty || 0;
+    }
+    // For products without sizes
+    else {
+      return subProduct.qty || subProduct.stock || product.qty || product.stock || 0;
+    }
+  })();
 
   return (
     <div className="flex flex-col gap-3">
@@ -148,7 +190,7 @@ export default function AddToCart({
           variant="outline"
           size="icon"
           onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-          disabled={isAdding || quantity <= 1} // Disable if adding or quantity is 1
+          disabled={isAdding || quantity <= 1}
         >
           <MinusCircle className="h-4 w-4" />
         </Button>
@@ -158,16 +200,15 @@ export default function AddToCart({
         <Button
           variant="outline"
           size="icon"
-          onClick={() => setQuantity(prev => Math.min(maxQuantity, prev + 1))} // Prevent exceeding stock
-          // Disable if adding, no size selected, or max stock reached
-          disabled={isAdding || selectedSizeIndex === undefined || quantity >= maxQuantity}
+          onClick={() => setQuantity(prev => Math.min(maxQuantity, prev + 1))}
+          disabled={isAdding || quantity >= maxQuantity || maxQuantity <= 0}
         >
           <PlusCircle className="h-4 w-4" />
         </Button>
-        {selectedSizeIndex !== undefined && maxQuantity > 0 && (
+        {maxQuantity > 0 && (
            <span className="text-xs text-gray-500 ml-2">({maxQuantity} available)</span>
         )}
-         {selectedSizeIndex !== undefined && maxQuantity <= 0 && (
+         {maxQuantity <= 0 && (
            <span className="text-xs text-red-500 ml-2">(Out of stock)</span>
         )}
       </div>
@@ -177,13 +218,13 @@ export default function AddToCart({
         onClick={handleAddToCart}
         variant={variant}
         size={size}
-        className="flex items-center justify-center gap-2" // Center content
-        // Disable button if adding, or if size hasn't been selected or is out of stock
-        disabled={isAdding || selectedSizeIndex === undefined || maxQuantity <= 0}
+        className="flex items-center justify-center gap-2"
+        // Disable if adding, or if product has sizes but no size selected, or if out of stock
+        disabled={isAdding || (product.subProducts?.[0]?.sizes?.length > 0 && selectedSizeIndex === undefined) || maxQuantity <= 0}
       >
         {isAdding ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" /> {/* Use Loader2 */}
+            <Loader2 className="h-4 w-4 animate-spin" />
             <span>Adding...</span>
           </>
         ) : (
