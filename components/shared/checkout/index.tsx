@@ -184,7 +184,7 @@ export default function CheckoutComponent() {
           if (cartResult.status === 'rejected') toast.error("Failed to load cart details.");
         }
 
-        // Process User Data
+        // Process User Data - Enhanced handling for "User not found" scenario
         if (userResult.status === 'fulfilled' && userResult.value) {
           const userDataFromAction = userResult.value; // This is the object from getUserById
           console.log("[CheckoutComponent] Raw user data:", userDataFromAction);
@@ -207,19 +207,58 @@ export default function CheckoutComponent() {
           setUser(processedUserData); // Set the processed user state
           console.log("[CheckoutComponent] Processed user data:", processedUserData);
         } else {
-          console.error("[CheckoutComponent] Error fetching user data:", userResult.status === 'rejected' ? userResult.reason : 'No user data returned');
+          console.error("[CheckoutComponent] User not found in database. Attempting to create/sync user...");
           
-          // Create fallback user object from session if getUserById failed
+          // Try to create/sync the user if session exists but user not found in DB
           if (session?.user) {
-            const fallbackUserData: UserData = {
-              _id: session.user.id || '',
-              firstName: session?.user?.name ? session.user.name.split(' ')[0] : '',
-              lastName: session?.user?.name ? session.user.name.split(' ').slice(1).join(' ') : '',
-              email: session?.user?.email || '',
-              image: session?.user?.image || '',
-            };
-            setUser(fallbackUserData);
-            console.log("[CheckoutComponent] Created fallback user data from session:", fallbackUserData);
+            try {
+              const createUserResponse = await fetch('/api/user/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sessionUser: session.user,
+                  userId: userId
+                }),
+                credentials: 'include'
+              });
+
+              if (createUserResponse.ok) {
+                const syncResult = await createUserResponse.json();
+                if (syncResult.success && syncResult.user) {
+                  const syncedUserData: UserData = {
+                    _id: syncResult.user._id,
+                    firstName: syncResult.user.firstName || session.user.name?.split(' ')[0] || '',
+                    lastName: syncResult.user.lastName || session.user.name?.split(' ').slice(1).join(' ') || '',
+                    email: syncResult.user.email || session.user.email || '',
+                    phone: syncResult.user.phone || '',
+                    username: syncResult.user.username || '',
+                    image: syncResult.user.image || session.user.image || '',
+                  };
+                  setUser(syncedUserData);
+                  console.log("[CheckoutComponent] User synced successfully:", syncedUserData);
+                } else {
+                  throw new Error('Failed to sync user data');
+                }
+              } else {
+                throw new Error('Sync API call failed');
+              }
+            } catch (syncError) {
+              console.error("[CheckoutComponent] Failed to sync user:", syncError);
+              
+              // Create fallback user object from session if sync failed
+              const fallbackUserData: UserData = {
+                _id: session.user.id || '',
+                firstName: session.user.name ? session.user.name.split(' ')[0] : '',
+                lastName: session.user.name ? session.user.name.split(' ').slice(1).join(' ') : '',
+                email: session.user.email || '',
+                image: session.user.image || '',
+                username: session.user.username || '',
+                phone: ''
+              };
+              setUser(fallbackUserData);
+              console.log("[CheckoutComponent] Using fallback user data from session:", fallbackUserData);
+              toast.warning("User profile partially loaded. Some features may be limited.");
+            }
           } else {
             toast.error("Failed to load user details. Please refresh.");
             setCheckoutError("User data could not be loaded. Please try logging in again.");
