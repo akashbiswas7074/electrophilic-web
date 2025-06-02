@@ -163,8 +163,12 @@ const WishlistPage = () => {
                 className="object-cover transition-transform duration-300 group-hover:scale-105"
                 onError={(e) => { e.currentTarget.src = '/placeholder.png'; }} // Fallback on error
               />
-               {/* Optional: Discount Badge */}
-               {/* {item.discount && item.discount > 0 && ... } */}
+               {/* Discount Badge */}
+               {item.discount && item.discount > 0 && (
+                 <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-sm">
+                   {item.discount}% OFF
+                 </div>
+               )}
             </Link>
 
             {/* Product Details */}

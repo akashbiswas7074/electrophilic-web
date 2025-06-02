@@ -1,6 +1,6 @@
 'use client';
 
-import ProductCard from "@/components/shared/ProductCard";
+import { ProductCardSmall } from "@/components/shared/product/ProductCardSmall";
 import FilterButton from "@/components/shared/shop/FilterButton";
 import SidebarFilters from "@/components/shared/shop/SidebarFilters";
 import { type SelectedFiltersState } from "@/components/shared/shop/FilterButton";
@@ -37,8 +37,9 @@ interface TransformedProduct {
   id: string; // Changed from _id
   name: string;
   description: string;
-  price: number;
-  discount?: number; // Changed from discountPrice, made optional
+  price: number; // This will be the final price (after discount)
+  originalPrice: number; // Original price before any discount
+  discount?: number; // Discount percentage
   image: string; // Added: Expects a single image URL
   images: any[]; // Keep original images array if needed elsewhere
   slug: string; // Added: Generate a slug
@@ -51,6 +52,10 @@ interface TransformedProduct {
   isOnSale: boolean;
   isBestseller?: boolean; // Made optional to match ProductCard props
   isNew?: boolean; // Added optional isNew based on ProductCard props
+  featured?: boolean; // Add featured property for compatibility
+  isFeatured?: boolean; // Add isFeatured property for compatibility
+  orderCount?: number; // Add order count for bestsellers
+  sold?: number; // Add sold count from MongoDB directly
 }
 
 const transformProductSafely = (product: any): TransformedProduct | null => {
@@ -104,6 +109,13 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       return '/placeholder-image.jpg';
     };
 
+    // Calculate proper price based on discount
+    const calculatePriceWithDiscount = (originalPrice: number, discount: number): number => {
+      if (!originalPrice || !discount || discount <= 0) return originalPrice;
+      // Fix: Round the discounted price to 2 decimal places to avoid floating point issues
+      return Math.round((originalPrice * (1 - discount/100)) * 100) / 100;
+    };
+
     // Generate a slug if not available, with logging for missing slugs
     const getSlug = (p: any): string => {
       if (p.slug && typeof p.slug === 'string' && p.slug.trim() !== '') return p.slug.trim();
@@ -123,9 +135,55 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
     // Determine if the product is on sale
     const isOnSale = typeof product.discount === 'number' && product.discount > 0;
 
-    // Determine if the product is a bestseller or featured
-    const isBestseller = !!product.featured;
+    // Correctly determine if the product is a bestseller (using isBestseller property)
+    // instead of using the featured property
+    const isBestseller = !!product.isBestseller;
+    
+    // Explicitly handle featured status by checking both possible property names
+    // This ensures we properly bridge the featured flag between backend and frontend
+    const isProductFeatured = 
+      !!product.featured || 
+      !!product.isFeatured ||
+      (product._doc && (!!product._doc.featured || !!product._doc.isFeatured));
+    
     const isNew = Date.now() - new Date(product.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000; // 7 days
+    
+    // Get total sold count across all subproducts and the main product
+    const mainProductSold = typeof product.sold === 'number' ? product.sold : 0;
+    
+    // If the main product sold count is already populated, use it directly
+    let totalSoldCount = mainProductSold;
+    
+    // If main product doesn't have a sold count, calculate from subproducts
+    if (mainProductSold === 0 && Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+      // First check if any subProduct has a pre-calculated sold count
+      const anySubProductHasSoldCount = product.subProducts.some(
+        (subProduct: any) => typeof subProduct.sold === 'number' && subProduct.sold > 0
+      );
+      
+      if (anySubProductHasSoldCount) {
+        // If subProducts have their own sold counts, sum those up
+        totalSoldCount = product.subProducts.reduce((total: number, subProduct: any) => {
+          return total + (typeof subProduct.sold === 'number' ? subProduct.sold : 0);
+        }, 0);
+      } else {
+        // If subProducts don't have sold counts, calculate from sizes
+        totalSoldCount = product.subProducts.reduce((total: number, subProduct: any) => {
+          let sizesSold = 0;
+          if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+            sizesSold = subProduct.sizes.reduce((sizesTotal: number, size: any) => {
+              return sizesTotal + (typeof size.sold === 'number' ? size.sold : 0);
+            }, 0);
+          }
+          return total + sizesSold;
+        }, 0);
+      }
+    }
+    
+    // If there's an orderCount property available, use it as a fallback
+    if (totalSoldCount === 0 && typeof product.orderCount === 'number' && product.orderCount > 0) {
+      totalSoldCount = product.orderCount;
+    }
     
     // Map category info
     const categoryId = getCategoryId(product.category);
@@ -140,16 +198,26 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       return null;
     }
 
+    // Get base product price
+    const basePrice = typeof product.price === 'number' ? product.price : 
+             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.price) || 
+             (product.subProducts && product.subProducts[0]?.price) || 0;
+           
+    // Get discount percentage
+    const discountPercentage = typeof product.discount === 'number' ? product.discount : 0;
+    
+    // Calculate final price with discount, properly rounded
+    const finalPrice = calculatePriceWithDiscount(basePrice, discountPercentage);
+
     return {
       id: safeToString(product._id),
       name: product.name || '',
       description: product.description || '',
-      price: typeof product.price === 'number' ? product.price : 
-             (product.subProducts && product.subProducts[0]?.sizes && product.subProducts[0].sizes[0]?.price) || 
-             (product.subProducts && product.subProducts[0]?.price) || 0,
-      discount: typeof product.discount === 'number' ? product.discount : 0,
+      price: finalPrice,
+      originalPrice: basePrice, // Add original price field
+      discount: discountPercentage,
       image: getImageUrl(product),
-      images: [], // We don't need full image array for product cards
+      images: Array.isArray(product.images) ? product.images : [], // Pass images array if available
       slug: slug, // Use the processed slug
       category: categoryName,
       categoryId: categoryId,
@@ -165,6 +233,10 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       isOnSale: isOnSale,
       isBestseller: isBestseller,
       isNew: isNew,
+      featured: isProductFeatured, // Add the featured property to the returned object
+      isFeatured: isProductFeatured, // Add isFeatured for compatibility with other components
+      sold: totalSoldCount, // Combined sold count from main product and all subproducts
+      orderCount: totalSoldCount, // For backward compatibility
     };
   } catch (error) {
     console.error("[transformProductSafely - ShopPage] Error transforming product:", product, error);
@@ -682,10 +754,9 @@ const ShopPage = () => {
                 : 'space-y-6'}`}
               >
                 {currentProducts.map((product) => (
-                  <ProductCard 
+                  <ProductCardSmall 
                     key={product.id} 
-                    product={product} 
-                    layout={viewMode}
+                    product={product}
                   />
                 ))}
               </div>

@@ -108,10 +108,13 @@ const CartSheetItems = ({ product }: { product: any }) => {
   const productName = safeToString(product.name); // Use helper
   const productSize = product.size ? safeToString(product.size) : null; // Use helper
   const productId = safeToString(product._id); // Use helper
-  const productPrice = Number(product.price || 0); // Ensure price is a number
+  
+  // Ensure price is a valid number
+  const productPrice = typeof product.price === 'number' ? product.price : 
+                      typeof product.price === 'string' ? parseFloat(product.price) : 0;
 
   // Pre-compute any derived data to avoid calculations in render
-  const formattedPrice = (productPrice * currentQuantity).toFixed(2);
+  const formattedPrice = productPrice > 0 ? (productPrice * currentQuantity).toFixed(2) : "Price unavailable";
   const imageUrl = getImageUrl();
 
   return (

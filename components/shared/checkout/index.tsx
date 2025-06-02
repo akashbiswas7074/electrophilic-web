@@ -187,14 +187,45 @@ export default function CheckoutComponent() {
         // Process User Data
         if (userResult.status === 'fulfilled' && userResult.value) {
           const userDataFromAction = userResult.value; // This is the object from getUserById
-          setUser(userDataFromAction); // Set the user state
-          console.log("[CheckoutComponent] User data processed:", userDataFromAction);
+          console.log("[CheckoutComponent] Raw user data:", userDataFromAction);
+          
+          // Create a properly structured user object with fallbacks for all required fields
+          const processedUserData: UserData = {
+            _id: userDataFromAction._id,
+            firstName: userDataFromAction.firstName || 
+                     (userDataFromAction.name ? userDataFromAction.name.split(' ')[0] : '') ||
+                     (session?.user?.name ? session.user.name.split(' ')[0] : ''),
+            lastName: userDataFromAction.lastName || 
+                    (userDataFromAction.name ? userDataFromAction.name.split(' ').slice(1).join(' ') : '') ||
+                    (session?.user?.name ? session.user.name.split(' ').slice(1).join(' ') : ''),
+            email: userDataFromAction.email || session?.user?.email || '',
+            phone: userDataFromAction.phone || '',
+            username: userDataFromAction.username || '',
+            image: userDataFromAction.image || session?.user?.image || '',
+          };
+          
+          setUser(processedUserData); // Set the processed user state
+          console.log("[CheckoutComponent] Processed user data:", processedUserData);
         } else {
           console.error("[CheckoutComponent] Error fetching user data:", userResult.status === 'rejected' ? userResult.reason : 'No user data returned');
-          toast.error("Failed to load user details. Please refresh.");
-          // Consider this a critical error? Maybe redirect or show blocking error.
-          setIsLoading(false);
-          return; // Stop further processing if user data fails
+          
+          // Create fallback user object from session if getUserById failed
+          if (session?.user) {
+            const fallbackUserData: UserData = {
+              _id: session.user.id || '',
+              firstName: session?.user?.name ? session.user.name.split(' ')[0] : '',
+              lastName: session?.user?.name ? session.user.name.split(' ').slice(1).join(' ') : '',
+              email: session?.user?.email || '',
+              image: session?.user?.image || '',
+            };
+            setUser(fallbackUserData);
+            console.log("[CheckoutComponent] Created fallback user data from session:", fallbackUserData);
+          } else {
+            toast.error("Failed to load user details. Please refresh.");
+            setCheckoutError("User data could not be loaded. Please try logging in again.");
+            setIsLoading(false);
+            return; // Stop further processing if user data fails
+          }
         }
 
         // Process Address Data - Enhanced error handling

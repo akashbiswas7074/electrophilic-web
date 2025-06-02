@@ -89,21 +89,9 @@ export const transformProductSafely = (product: any) => {
       idString = productIdField.toHexString(); // Standard for BSON/MongoDB ObjectId
     } else if (productIdField && typeof productIdField.toString === 'function') {
       idString = productIdField.toString();
-      // Add a check to see if toString() returned a generic object string
-      if (idString === '[object Object]') {
-        console.warn(`[transformProductSafely] Product _id.toString() resulted in '[object Object]'. ID: ${JSON.stringify(productIdField)}, Product Name: ${product.name}`);
-        // Attempt to stringify the problematic ID or use a placeholder
-        idString = `INVALID_ID_${JSON.stringify(productIdField)}`;
-      }
     } else {
-      console.error(`[transformProductSafely] Product _id is in an unhandled format. ID: ${JSON.stringify(productIdField)}, Product Name: ${product.name}`);
-      // Skip product if ID cannot be resolved
+      console.warn(`[transformProductSafely] Product _id is in an unhandled format: ${JSON.stringify(productIdField)}`);
       return null;
-    }
-    
-    if (!idString || idString.startsWith('INVALID_ID')) {
-        console.error(`[transformProductSafely] Failed to obtain a valid string ID for product. Original _id: ${JSON.stringify(product._id)}, Product Name: ${product.name}`);
-        return null; // Skip product if ID is invalid
     }
 
     let slug = product.slug;
@@ -132,12 +120,15 @@ export const transformProductSafely = (product: any) => {
     
     // Check if subProduct.sizes exists and is an array
     if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
-      // Process sizes if available
+      // Process sizes if available - include sizes with empty strings but valid price/qty
       sizes = subProduct.sizes.map((size: any) => ({
-        size: String(size?.size || "N/A"),
+        size: String(size?.size || ""),
         price: parseFloat(size?.price) || 0,
         qty: parseInt(size?.qty) || 0
-      })).filter((size: any) => size.size !== "N/A");
+      })).filter((size: any) => {
+        // Keep sizes with valid price or quantity, even if size name is empty
+        return size.price > 0 || size.qty > 0;
+      });
       
       // Calculate price based on sizes
       if (sizes.length > 0) {
@@ -233,6 +224,15 @@ export const transformProductSafely = (product: any) => {
       }
     }
 
+    // --- Featured Status Determination --- 
+    // Fix for the featured bridge - ensure consistent featured status detection
+    const isProductFeatured = Boolean(
+      product.featured || 
+      product.isFeatured || 
+      (product._doc && (product._doc.featured || product._doc.isFeatured)) ||
+      (typeof product._id !== 'undefined' && (product.featured === true || product.isFeatured === true))
+    );
+
     // Placeholder logic for subtitle and colorCountText
     // In a real scenario, these would come from product data
     let subtitle: string | undefined = undefined;
@@ -256,7 +256,7 @@ export const transformProductSafely = (product: any) => {
       price: price, // Already processed number
       originalPrice: parseFloat(subProduct.originalPrice) || price, // Fallback to calculated price
       discount: parseInt(subProduct.discount) || 0,
-      isBestseller: !!product.featured,
+      isBestseller: !!product.isBestseller,
       isSale: !!subProduct.isSale,
       slug: slug, // Use the processed slug
       prices: (subProduct.sizes || [])
@@ -268,6 +268,11 @@ export const transformProductSafely = (product: any) => {
       sizes: sizes, // Already processed array of plain objects
       subtitle: product.subtitle || subtitle, // Use direct product.subtitle if available, otherwise derived
       colorCountText: product.colorCountText || colorCountText, // Use direct if available
+      // Featured bridge fix - add both properties for compatibility
+      featured: isProductFeatured,
+      isFeatured: isProductFeatured,
+      sold: typeof product.sold === 'number' ? product.sold : 0, // Include sold count
+      stock: defaultQuantity, // Include stock data
     };
 
   } catch (error) {

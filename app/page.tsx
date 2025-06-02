@@ -1,12 +1,12 @@
 // ISR(CACHE) - 1 HOUR
 import React, { JSX } from "react"; // Modified to import JSX namespace
+import BestSellingProducts from "@/components/sections/BestSellingProducts";
 import BannerCarousel from "@/components/shared/home/BannerCarousel";
 import StrengthTakesSweat from "@/components/shared/home/StrengthTakesSweat"; 
 import BlogImages from "@/components/shared/home/BlogImages";
 import CrazyDeals from "@/components/shared/home/CrazyDeals";
 import FeaturedProducts from "@/components/shared/home/FeaturedProducts";
 import NeedOfWebsite from "@/components/shared/home/NeedOfWebsite";
-import ProductCard from "@/components/shared/home/ProductCard";
 import SpecialCombos from "@/components/shared/home/SpecialCombos";
 import Hero from "@/components/sections/Hero";
 import DynamicHeroSection from "@/components/shared/home/DynamicHeroSection";
@@ -34,6 +34,9 @@ import CategoryProductSection from "@/components/sections/CategoryProductSection
 import { getCategorySectionsWithProducts } from "@/lib/database/actions/category-sections.actions";
 import { getVisibleWebsiteSections } from "@/lib/database/actions/website.section.actions"; 
 import { getActiveHeroSections } from "@/lib/database/actions/hero-section.actions";
+import BestsellingSection from "@/components/shared/home/BestsellingSection";
+import NewArrivalsSection from "@/components/shared/home/NewArrivalsSection";
+import FeaturedProductsSection from "@/components/shared/home/FeaturedProductsSection";
 
 // Define the type for an individual offer based on your HomeScreenOffer model
 interface HomeScreenOfferType {
@@ -84,6 +87,13 @@ interface TransformedProduct {
   sizes: { size: string; price: number; qty: number }[];
   subtitle?: string; // New: For "Sustainable Materials", "Coming Soon"
   colorCountText?: string; // New: For "1 Colour"
+  sold?: number; // Add the sold property to fix the TypeScript error
+  stock?: number;
+  // isBestseller?: boolean; // Made optional to match ProductCard props
+  isNew?: boolean; // Added optional isNew based on ProductCard props
+  orderCount?: number; // Add order count for bestsellers
+  isFeatured?: boolean; // Add featured property for compatibility with product components
+  featured?: boolean; // Add featured property for compatibility with product components
 }
 
 // Robust product transformer that manually creates a plain object
@@ -147,12 +157,15 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
     
     // Check if subProduct.sizes exists and is an array
     if (subProduct.sizes && Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
-      // Process sizes if available
+      // Process sizes if available - include sizes with empty strings but valid prices
       sizes = subProduct.sizes.map((size: any) => ({
-        size: String(size?.size || "N/A"),
+        size: String(size?.size || ""),
         price: parseFloat(size?.price) || 0,
         qty: parseInt(size?.qty) || 0
-      })).filter((size: any) => size.size !== "N/A");
+      })).filter((size: any) => {
+        // Keep sizes with valid price or quantity, even if size name is empty
+        return size.price > 0 || size.qty > 0;
+      });
       
       // Calculate price based on sizes
       if (sizes.length > 0) {
@@ -236,7 +249,9 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       price: price, // Already processed number
       originalPrice: parseFloat(subProduct.originalPrice) || price, // Fallback to calculated price
       discount: parseInt(subProduct.discount) || 0,
-      isBestseller: !!product.featured,
+      isBestseller: !!product.isBestseller || (typeof product.sold === 'number' && product.sold > 5),
+      isFeatured: !!product.featured, // Explicitly preserve featured status
+      featured: !!product.featured, // Add both property names for compatibility
       isSale: !!subProduct.isSale,
       slug: slug, // Use the processed slug
       prices: (subProduct.sizes || [])
@@ -248,6 +263,8 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       sizes: sizes, // Already processed array of plain objects
       subtitle: product.subtitle || subtitle, // Use direct product.subtitle if available, otherwise derived
       colorCountText: product.colorCountText || colorCountText, // Use direct if available
+      sold: calculateTotalSoldCount(product), // Calculate total sold count across product, subproducts and sizes
+      stock: parseInt(product.stock) || defaultQuantity, // Add the stock property
     };
 
     return plainProduct;
@@ -257,6 +274,79 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
     return null; // Return null on any unexpected error during transformation
   }
 };
+
+// Helper function to calculate total sold count across product, subproducts and sizes
+function calculateTotalSoldCount(product: any): number {
+  if (!product) return 0;
+  
+  // Main product sold count - handle all possible data types
+  const mainProductSold = typeof product.sold === 'number' ? product.sold : 
+                          typeof product.sold === 'string' ? parseInt(product.sold) : 
+                          product.sold ? Number(product.sold) : 0;
+  
+  // If the main product sold count is already populated, use it directly
+  if (mainProductSold > 0) {
+    return mainProductSold;
+  }
+  
+  // Otherwise, calculate from subproducts (if any)
+  let subProductsSold = 0;
+  if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+    // First check if any subProduct has a pre-calculated sold count
+    const anySubProductHasSoldCount = product.subProducts.some(
+      (subProduct: any) => {
+        if (!subProduct) return false;
+        const subProductSold = typeof subProduct.sold === 'number' ? subProduct.sold : 
+                               typeof subProduct.sold === 'string' ? parseInt(subProduct.sold) : 
+                               subProduct.sold ? Number(subProduct.sold) : 0;
+        return subProductSold > 0;
+      }
+    );
+    
+    if (anySubProductHasSoldCount) {
+      // If subProducts have their own sold counts, sum those up
+      subProductsSold = product.subProducts.reduce((total: number, subProduct: any) => {
+        if (!subProduct) return total;
+        const subProductSold = typeof subProduct.sold === 'number' ? subProduct.sold : 
+                               typeof subProduct.sold === 'string' ? parseInt(subProduct.sold) : 
+                               subProduct.sold ? Number(subProduct.sold) : 0;
+        return total + subProductSold;
+      }, 0);
+    } else {
+      // If subProducts don't have sold counts, calculate from sizes
+      subProductsSold = product.subProducts.reduce((total: number, subProduct: any) => {
+        if (!subProduct) return total;
+        let sizesSold = 0;
+        if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+          sizesSold = subProduct.sizes.reduce((sizesTotal: number, size: any) => {
+            if (!size) return sizesTotal;
+            const sizeSold = typeof size.sold === 'number' ? size.sold : 
+                            typeof size.sold === 'string' ? parseInt(size.sold) : 
+                            size.sold ? Number(size.sold) : 0;
+            return sizesTotal + sizeSold;
+          }, 0);
+        }
+        return total + sizesSold;
+      }, 0);
+    }
+  }
+  
+  // If there's an orderCount property available, use it as a fallback
+  const orderCount = typeof product.orderCount === 'number' ? product.orderCount : 
+                     typeof product.orderCount === 'string' ? parseInt(product.orderCount) : 
+                     product.orderCount ? Number(product.orderCount) : 0;
+  
+  // Use the most reliable value
+  if (subProductsSold > 0) {
+    return subProductsSold;
+  } else if (orderCount > 0) {
+    // Otherwise fall back to orderCount if available
+    return orderCount;
+  }
+  
+  // Default to 0 if no sold data available
+  return 0;
+}
 
 // Define interface for hero sections
 interface HeroSection {
@@ -322,6 +412,30 @@ export default async function Home() {
             }
           }
           
+          // Calculate total sold count (from main product and all subproducts)
+          const mainProductSold = typeof product.sold === 'number' ? product.sold : 0;
+          
+          // Calculate total sold count from all subproducts (if any)
+          let subProductsSold = 0;
+          if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+            subProductsSold = product.subProducts.reduce((total: number, subP: any) => {
+              const subProductSoldCount = typeof subP.sold === 'number' ? subP.sold : 0;
+              
+              // Get sold count from sizes in this subproduct
+              let sizesSold = 0;
+              if (subP.sizes && Array.isArray(subP.sizes)) {
+                sizesSold = subP.sizes.reduce((sizesTotal: number, size: any) => {
+                  return sizesTotal + (typeof size.sold === 'number' ? size.sold : 0);
+                }, 0);
+              }
+              
+              return total + subProductSoldCount + sizesSold;
+            }, 0);
+          }
+          
+          // Total sold is the sum of main product sold and all subproducts (including their sizes)
+          const totalSoldCount = mainProductSold + subProductsSold;
+          
           return {
             id: product._id.toString(),
             name: product.name || "",
@@ -336,7 +450,10 @@ export default async function Home() {
             gallery: gallery,
             sizes: sizes,
             color: subProduct.color || "",
-            colorName: subProduct.color_name || ""
+            colorName: subProduct.color_name || "",
+            sold: totalSoldCount, // Explicitly include the sold count
+            isFeatured: true, // Explicitly set isFeatured for all products from getAllFeaturedProducts
+            featured: true     // Add both property names for compatibility
           };
         }).filter(Boolean);
       }
@@ -428,6 +545,9 @@ export default async function Home() {
   const sectionComponents = {
     'banner-carousel': <div className="h-[50%]"><BannerCarousel /></div>,
     'strength-takes-sweat': <StrengthTakesSweat />,
+    'featured-products': featuredProducts.length > 0 ? (
+      <FeaturedProductsSection products={featuredProducts} />
+    ) : null,
     'featured-showcase': featuredProducts.length > 0 ? (
       <FeaturedShowcase
         featuredProducts={featuredProducts.slice(0, 3).map((product: TransformedProduct) => ({
@@ -460,24 +580,29 @@ export default async function Home() {
         ))}
       </>
     ) : null,
+    // 'bestsellers': topSelling.length > 0 ? (
+    //   <BestsellingSection products={topSelling} />
+    // ) : null,
     'bestsellers': topSelling.length > 0 ? (
-      <div id="bestsellers">
-        <ProductCarousel
-          heading="BEST SELLERS"
-          products={topSelling}
-        />
-      </div>
-    ) : null,
+      <BestSellingProducts />
+    ) : (
+      // Fallback: use the standalone BestSellingProducts component
+      <BestSellingProducts />
+    ),
     'crazy-deals': <CrazyDeals dealsData={crazyDealsData} />,
     'tough-shoe-hero': <ToughShoeHero />,
     'new-arrivals': newArrivals.length > 0 ? (
       <div id="new-arrivals">
-        <ProductCarousel
-          heading="NEW ARRIVALS"
-          products={newArrivals}
-        />
+        <NewArrivalsSection products={newArrivals} />
       </div>
-    ) : null,
+    ) : (
+      // Fallback: show all products as new arrivals if no specific new arrivals found
+      allProducts.length > 0 ? (
+        <div id="new-arrivals">
+          <NewArrivalsSection products={allProducts.slice(0, 8)} />
+        </div>
+      ) : null
+    ),
     'featured-videos': featuredVideos && featuredVideos.length > 0 ? (
       <FeaturedVideoSection videos={featuredVideos} />
     ) : null,
@@ -585,10 +710,7 @@ export default async function Home() {
 
               {topSelling.length > 0 && (
                 <div id="bestsellers">
-                  <ProductCarousel
-                    heading="BEST SELLERS"
-                    products={topSelling}
-                  />
+                  <BestsellingSection products={topSelling} />
                 </div>
               )}
               
@@ -597,10 +719,7 @@ export default async function Home() {
               
               {newArrivals.length > 0 && (
                 <div id="new-arrivals">
-                  <ProductCarousel
-                    heading="NEW ARRIVALS"
-                    products={newArrivals}
-                  />
+                  <NewArrivalsSection products={newArrivals} />
                 </div>
               )}
 

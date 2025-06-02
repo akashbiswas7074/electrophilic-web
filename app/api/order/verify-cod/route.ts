@@ -177,11 +177,21 @@ export async function POST(request: NextRequest) {
             // Update stock quantity and sold counts
             subProduct.sizes[sizeIndex].qty -= item.qty;
             subProduct.sizes[sizeIndex].sold = (subProduct.sizes[sizeIndex].sold || 0) + item.qty;
-            if (typeof subProduct.sold === 'number') {
-                subProduct.sold += item.qty;
-            } else {
+            
+            // Update the subProduct sold count ONLY if it doesn't already track from sizes
+            // Check if subProduct.sold is tracking independently from sizes
+            const existingSizesSoldCount = subProduct.sizes.reduce((total: any, size: any) => 
+              total + (typeof size.sold === 'number' ? size.sold : 0), 0);
+            
+            // Only update subProduct.sold if it's not already accounting for size sold counts
+            // or if it's a fresh new value (undefined or 0)
+            if (typeof subProduct.sold !== 'number' || subProduct.sold === 0) {
                 subProduct.sold = item.qty;
+            } else if (subProduct.sold !== existingSizesSoldCount) {
+                // If subProduct.sold is being independently tracked (not just sum of sizes)
+                subProduct.sold += item.qty;
             }
+            // Otherwise don't update subProduct.sold as it would double-count
             updateApplied = true;
           }
         }

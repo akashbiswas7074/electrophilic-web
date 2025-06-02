@@ -19,6 +19,8 @@ declare module "next-auth" {
       role?: string;
       /** The user's phone number */
       phone?: string | null; // Added phone
+      /** The user's provider. */
+      provider?: string;
       // image is already part of DefaultSession["user"]
     } & DefaultSession["user"]; // Extends the default session user type (includes name, email, image)
   }

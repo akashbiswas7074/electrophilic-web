@@ -3,7 +3,8 @@
 import { ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { CartProvider } from '@/contexts/CartContext';
-import { WishlistProvider } from '@/contexts/WishlistContext'; // Import WishlistProvider
+import { WishlistProvider } from '@/contexts/WishlistContext';
+import { ProductOrderCountsProvider } from '@/contexts/ProductOrderCountsContext';
 
 // Dynamic import for NextAuthProvider
 const AuthProviderComponent = dynamic(
@@ -18,9 +19,11 @@ export default function ClientProviders({ children }: { children: ReactNode }) {
   return (
     <AuthProviderComponent>
       <CartProvider>
-        <WishlistProvider> {/* Add WishlistProvider wrapper */}
-          {children}
-        </WishlistProvider> {/* Close WishlistProvider wrapper */}
+        <WishlistProvider>
+          <ProductOrderCountsProvider>
+            {children}
+          </ProductOrderCountsProvider>
+        </WishlistProvider>
       </CartProvider>
     </AuthProviderComponent>
   );

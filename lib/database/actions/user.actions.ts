@@ -77,18 +77,30 @@ export async function getUserById(userId: string) {
       console.log(`[getUserById] User not found with ID: ${userId}`);
       return null;
     }
-    console.log(`[getUserById] User found: ${user.email}, Name: ${user.firstName} ${user.lastName}`);
+    console.log(`[getUserById] User found: ${user.email}, Name: ${user.firstName} ${user.lastName || ''}`);
     
-    // Return all fields needed by the frontend, including firstName and lastName
+    const formattedAddresses = user.address || [];
+      
+    // Add debug logs to track data flow
+    console.log(`[getUserById] User data being returned:`, {
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email,
+      phone: user.phone || (user.address && user.address.length > 0 ? user.address[0].phoneNumber : ''),
+      addressCount: formattedAddresses.length
+    });
+    
+    // Return all fields needed by the checkout component
     return JSON.parse(JSON.stringify({
       _id: user._id,
       email: user.email,
       username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
       image: user.image,
-      phone: user.address?.[0]?.phoneNumber, // Example: get phone from default/first address if stored there
-      // Add other fields like 'provider', 'emailVerified' if needed by checkout
+      phone: user.phone || (user.address && user.address.length > 0 ? user.address[0].phoneNumber : ''),
+      // Include addresses if needed by checkout
+      addresses: formattedAddresses
     }));
   } catch (error) {
     console.error(`[getUserById] Error fetching user ${userId}:`, error);

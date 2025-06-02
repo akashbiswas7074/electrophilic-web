@@ -35,7 +35,7 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
 
   useEffect(() => {
     if (currentPhone) {
@@ -115,6 +115,11 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
       
       setSuccess('Phone number verified successfully!');
       toast.success('Phone number verified successfully!');
+      
+      // Update session to include phone number if user is logged in with Google
+      if (session?.user) {
+        await update({ phone: phoneNumber });
+      }
       
       // Call onSuccess callback if provided
       if (onSuccess) {
@@ -199,6 +204,7 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
             <Select
               value={channel}
               onValueChange={(value) => setChannel(value as 'sms' | 'whatsapp')}
+              disabled={isLoading}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select verification method" />
@@ -211,24 +217,29 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="phoneNumber" className="text-sm font-medium">Phone Number</Label>
+            <Label htmlFor="phone-number" className="text-sm font-medium">Phone Number</Label>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
               <Input
-                id="phoneNumber"
+                id="phone-number"
                 type="tel"
-                placeholder="+919999999999"
+                placeholder="+91 9876543210"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 className="pl-10"
                 disabled={isLoading}
-                required
               />
             </div>
-            <p className="text-xs text-gray-500 mt-1">Enter your phone number with country code</p>
+            <p className="text-xs text-gray-500">
+              Enter your phone number with country code
+            </p>
           </div>
           
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={isLoading || !phoneNumber.trim()}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -238,6 +249,12 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
               'Send Verification Code'
             )}
           </Button>
+          
+          {(session?.user as any)?.provider === 'google' && (
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              This will link your phone number to your Google account
+            </p>
+          )}
         </form>
       )}
 
@@ -258,49 +275,58 @@ const PhoneVerificationForm: React.FC<PhoneVerificationFormProps> = ({
             </div>
           )}
           
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="verificationCode" className="text-sm font-medium">Verification Code</Label>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="verification-code" className="text-sm font-medium">Verification Code</Label>
               <button 
-                type="button" 
+                type="button"
                 onClick={handleBackToPhone}
                 className="text-xs text-primary hover:underline"
+                disabled={isLoading}
               >
                 Change phone number
               </button>
             </div>
             <Input
-              id="verificationCode"
+              id="verification-code"
               type="text"
               placeholder="Enter 6-digit code"
               value={verificationCode}
               onChange={(e) => setVerificationCode(e.target.value)}
-              disabled={isLoading}
+              className="text-center text-lg tracking-widest"
               maxLength={6}
-              required
+              disabled={isLoading}
             />
+            <p className="text-xs text-gray-500">
+              Enter the 6-digit code sent to {phoneNumber}
+            </p>
           </div>
           
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              'Verify Phone Number'
-            )}
-          </Button>
-          
-          <div className="text-center">
-            <button
+          <div className="flex flex-col gap-2">
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || verificationCode.length !== 6}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Verify Code'
+              )}
+            </Button>
+            
+            <Button 
               type="button"
+              variant="outline"
+              className="w-full"
               onClick={handleResendOTP}
-              className="text-sm text-primary hover:underline"
               disabled={isLoading}
             >
-              Didn't receive a code? Resend
-            </button>
+              Resend Code
+            </Button>
           </div>
         </form>
       )}

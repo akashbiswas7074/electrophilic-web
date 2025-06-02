@@ -19,6 +19,18 @@ const getFirstSubProductInfo = (product: any): { image: string; discount: number
   };
 };
 
+// Enhanced helper function to extract comprehensive product info including featured status
+const getEnhancedProductInfo = (product: any) => {
+  const firstSubProduct = product.subProducts?.[0];
+  return {
+    image: firstSubProduct?.images?.[0]?.url || "/placeholder.png",
+    discount: firstSubProduct?.discount || 0,
+    featured: product.featured || false, // Explicitly preserve featured status
+    isFeatured: product.featured || false, // Add both property names for compatibility
+    sold: calculateTotalSoldCount(product), // Include sold count
+  };
+};
+
 // Get price information with optional sizes support
 function getPriceInfo(product: any) {
   const subProduct = product.subProducts?.[0];
@@ -61,6 +73,60 @@ function getQuantityInfo(product: any) {
   }
 }
 
+// Calculate comprehensive total sold count 
+const calculateTotalSoldCount = (product: any) => {
+  if (!product) return 0;
+  
+  // Main product sold count
+  const mainProductSold = typeof product.sold === 'number' ? product.sold : 0;
+  
+  // If the main product sold count is already populated, use it directly
+  if (mainProductSold > 0) {
+    return mainProductSold;
+  }
+  
+  // Otherwise, calculate from subproducts (if any)
+  let subProductsSold = 0;
+  if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+    // First check if any subProduct has a pre-calculated sold count
+    const anySubProductHasSoldCount = product.subProducts.some(
+      (subProduct: any) => typeof subProduct.sold === 'number' && subProduct.sold > 0
+    );
+    
+    if (anySubProductHasSoldCount) {
+      // If subProducts have their own sold counts, sum those up
+      subProductsSold = product.subProducts.reduce((total: number, subProduct: any) => {
+        return total + (typeof subProduct.sold === 'number' ? subProduct.sold : 0);
+      }, 0);
+    } else {
+      // If subProducts don't have sold counts, calculate from sizes
+      subProductsSold = product.subProducts.reduce((total: number, subProduct: any) => {
+        let sizesSold = 0;
+        if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+          sizesSold = subProduct.sizes.reduce((sizesTotal: number, size: any) => {
+            return sizesTotal + (typeof size.sold === 'number' ? size.sold : 0);
+          }, 0);
+        }
+        return total + sizesSold;
+      }, 0);
+    }
+  }
+  
+  // If there's an orderCount property available, use it as a fallback
+  const orderCount = typeof product.orderCount === 'number' ? product.orderCount : 0;
+  
+  // Use the most reliable value
+  if (subProductsSold > 0) {
+    return subProductsSold;
+  } else if (orderCount > 0) {
+    // Otherwise fall back to orderCount if available
+    return orderCount;
+  }
+  
+  // Default to 0 if no sold data available
+  return 0;
+};
+
 // get all top selling products
 export const getTopSellingProducts = unstable_cache(
   async () => {
@@ -79,18 +145,17 @@ export const getTopSellingProducts = unstable_cache(
         };
       }
 
-      // Add the primary image URL and discount to each product
+      // Use enhanced product info to preserve featured status
       const productsWithDetails = products.map(p => {
-        const { image, discount } = getFirstSubProductInfo(p);
+        const enhancedInfo = getEnhancedProductInfo(p);
         return {
           ...p,
-          image,
-          discount, // Add discount here
+          ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
         };
       });
 
       return {
-        products: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+        products: JSON.parse(JSON.stringify(productsWithDetails)),
         success: true,
         message: "Top selling products fetched successfully.",
       };
@@ -124,20 +189,19 @@ export const getNewArrivalProducts = unstable_cache(
         };
       }
 
-      // Add the primary image URL and discount
+      // Use enhanced product info to preserve featured status
       const productsWithDetails = products.map(p => {
-        const { image, discount } = getFirstSubProductInfo(p);
+        const enhancedInfo = getEnhancedProductInfo(p);
         return {
           ...p,
-          image,
-          discount, // Add discount here
+          ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
         };
       });
 
       return {
         message: "Fetched all new arrival products",
         success: true,
-        products: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+        products: JSON.parse(JSON.stringify(productsWithDetails)),
       };
     } catch (error) {
       handleError(error);
@@ -166,16 +230,16 @@ export async function getProductsByQuery(query: string) {
         message: "No products found with this search criteria.",
       };
     }
+    // Use enhanced product info to preserve featured status
     const productsWithDetails = products.map(p => {
-        const { image, discount } = getFirstSubProductInfo(p);
-        return {
-          ...p,
-          image,
-          discount, // Add discount here
-        };
-      });
+      const enhancedInfo = getEnhancedProductInfo(p);
+      return {
+        ...p,
+        ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
+      };
+    });
     return {
-      products: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+      products: JSON.parse(JSON.stringify(productsWithDetails)),
       success: true,
       message: "Successfully fetched all query related products.",
     };
@@ -580,19 +644,18 @@ export const getRelatedProductsBySubCategoryIds = unstable_cache(
         };
       }
 
-      // Add the primary image URL and discount
+      // Use enhanced product info to preserve featured status
       const productsWithDetails = products.map(p => {
-        const { image, discount } = getFirstSubProductInfo(p);
+        const enhancedInfo = getEnhancedProductInfo(p);
         return {
           ...p,
-          image,
-          discount, // Add discount here
+          ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
         };
       });
 
       return {
         success: true,
-        products: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+        products: JSON.parse(JSON.stringify(productsWithDetails)),
       };
     } catch (error) {
       handleError(error);
@@ -625,18 +688,17 @@ export const getAllFeaturedProducts = unstable_cache(
         };
       }
 
-      // Add the primary image URL and discount
+      // Use enhanced product info to preserve featured status
       const productsWithDetails = featuredProducts.map(p => {
-        const { image, discount } = getFirstSubProductInfo(p);
+        const enhancedInfo = getEnhancedProductInfo(p);
         return {
           ...p,
-          image,
-          discount, // Add discount here
+          ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
         };
       });
 
       return {
-        featuredProducts: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+        featuredProducts: JSON.parse(JSON.stringify(productsWithDetails)),
         success: true,
         message: "Successfully fetched all featured products.",
       };
@@ -668,19 +730,17 @@ export async function getAllProducts() {
       };
     }
 
-    // Add the primary image URL and discount
+    // Use enhanced product info to preserve featured status
     const productsWithDetails = products.map(p => {
-      const { image, discount } = getFirstSubProductInfo(p);
+      const enhancedInfo = getEnhancedProductInfo(p);
       return {
         ...p,
-        image,
-        discount, // Add discount here
-        // Keep other necessary transformations if any, but avoid deep population if not needed
+        ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
       };
     });
 
     return {
-      products: JSON.parse(JSON.stringify(productsWithDetails)), // Use updated variable
+      products: JSON.parse(JSON.stringify(productsWithDetails)),
       success: true,
       message: "Products fetched successfully"
     };

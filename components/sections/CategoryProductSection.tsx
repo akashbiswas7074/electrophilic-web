@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { transformProductSafely } from '@/lib/utils';
 import { ProductCardSmall } from '@/components/shared/product/ProductCardSmall';
@@ -28,7 +27,60 @@ const CategoryProductSection = ({
 }: CategoryProductSectionProps) => {
   // Transform products for consistent rendering
   const transformedProducts = products
-    .map(product => transformProductSafely(product))
+    .map(product => {
+      // Calculate accurate total sold count from all sources
+      const mainProductSold = typeof product.sold === 'number' ? product.sold : 
+                            (typeof product.sold === 'string' ? parseInt(product.sold, 10) : 0);
+      const orderCount = typeof product.orderCount === 'number' ? product.orderCount : 0;
+      const totalSoldCount = Math.max(mainProductSold, orderCount, 0); // Use highest value
+      
+      // Debug logging for troubleshooting
+      console.log(`CategoryProductSection - Product ${product.name}: Raw sold=${product.sold}, Processed sold=${totalSoldCount}`);
+      
+      // Check if the product has subProducts with sold counts
+      let subProductsSold = 0;
+      if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+        subProductsSold = product.subProducts.reduce((total: number, subProduct: any) => {
+          if (!subProduct) return total;
+          
+          // Get sold count from subproduct
+          const subProductSoldCount = typeof subProduct.sold === 'number' ? subProduct.sold : 0;
+          
+          // Get sold count from sizes
+          let sizesSold = 0;
+          if (subProduct.sizes && Array.isArray(subProduct.sizes)) {
+            sizesSold = subProduct.sizes.reduce((sizesTotal: number, size: any) => {
+              if (!size) return sizesTotal;
+              return sizesTotal + (typeof size.sold === 'number' ? size.sold : 0);
+            }, 0);
+          }
+          
+          return total + subProductSoldCount + sizesSold;
+        }, 0);
+      }
+      
+      // Use highest available sold count
+      const finalSoldCount = Math.max(mainProductSold, orderCount, subProductsSold, 0);
+      
+      // Transform the product using the utility function
+      let transformed = transformProductSafely(product);
+      
+      // If transformation succeeded, explicitly set critical properties
+      if (transformed) {
+        // Create a new object with forced properties to ensure they're correctly set
+        transformed = {
+          ...transformed,
+          sold: finalSoldCount, // Use the calculated final sold count
+          // Ensure featured status is correctly set
+          featured: Boolean(product.featured || product.isFeatured),
+          isFeatured: Boolean(product.featured || product.isFeatured),
+          // Set bestseller flag based on sold count
+          isBestseller: product.isBestseller || finalSoldCount > 5
+        };
+      }
+      
+      return transformed;
+    })
     .filter(Boolean);
     
   // Initialize the carousel
@@ -49,20 +101,34 @@ const CategoryProductSection = ({
     if (emblaApi) emblaApi.scrollNext();
   }, [emblaApi]);
 
-  // Function to decide whether to show grid or carousel based on screen size
-  const showMobileView = () => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < 1024;
-    }
-    return false;
-  };
-  
+  // Optimize mobile view detection with a single resize handler using throttling
   const [isMobileView, setIsMobileView] = React.useState(false);
   
   React.useEffect(() => {
-    const handleResize = () => {
-      setIsMobileView(showMobileView());
+    // Function to check if mobile view should be used based on window width
+    const checkMobileView = () => {
+      if (typeof window !== 'undefined') {
+        return window.innerWidth < 1024;
+      }
+      return false;
     };
+
+    // Throttle function to limit resize handler execution
+    const throttle = (func: Function, limit: number) => {
+      let inThrottle: boolean;
+      return function() {
+        if (!inThrottle) {
+          func();
+          inThrottle = true;
+          setTimeout(() => inThrottle = false, limit);
+        }
+      };
+    };
+    
+    // Throttled resize handler
+    const handleResize = throttle(() => {
+      setIsMobileView(checkMobileView());
+    }, 200);
     
     // Set initial state
     handleResize();
@@ -74,6 +140,13 @@ const CategoryProductSection = ({
     return () => {
       window.removeEventListener('resize', handleResize);
     };
+  }, []);
+
+  // Memoized image fallback handler
+  const handleImageError = React.useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const target = e.target as HTMLImageElement;
+    target.onerror = null; // Prevent infinite loop
+    target.src = "/images/broken-link.png";
   }, []);
 
   return (
@@ -130,12 +203,7 @@ const CategoryProductSection = ({
                   fill
                   className="object-cover transition-transform duration-700 group-hover:scale-105"
                   sizes="(max-width: 768px) 100vw, 33vw"
-                  onError={(e) => {
-                    // Fallback to placeholder if image fails to load
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null; // Prevent infinite loop
-                    target.src = "/images/broken-link.png";
-                  }}
+                  onError={handleImageError}
                 />
               ) : (
                 <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
@@ -182,12 +250,7 @@ const CategoryProductSection = ({
                     fill
                     className="object-cover"
                     sizes="(max-width: 768px) 100vw, 100vw"
-                    onError={(e) => {
-                      // Fallback to placeholder if image fails to load
-                      const target = e.target as HTMLImageElement;
-                      target.onerror = null; // Prevent infinite loop
-                      target.src = "/images/broken-link.png";
-                    }}
+                    onError={handleImageError}
                   />
                 ) : (
                   <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
