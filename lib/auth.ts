@@ -1,15 +1,15 @@
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
-import { NextAuthOptions, User as NextAuthUser } from "next-auth"; // Rename imported User
+import { NextAuthOptions, User as NextAuthUser } from "next-auth"; 
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import clientPromise from "@/lib/mongodb"; // Ensure this points to your MongoDB client promise export
+import clientPromise from "@/lib/mongodb"; 
 import { connectToDatabase } from "@/lib/database/connect";
-import User, { IUser } from "@/lib/database/models/user.model"; // Import your Mongoose User model and IUser interface
+import User, { IUser } from "@/lib/database/models/user.model"; 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 export const authOptions: NextAuthOptions = {
-  // Use MongoDB adapter
+  // Use the MongoDB adapter with the client promise
   adapter: MongoDBAdapter(clientPromise),
 
   // Configure one or more authentication providers

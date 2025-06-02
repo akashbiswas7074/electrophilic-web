@@ -1,26 +1,40 @@
-import { MongoClient, MongoClientOptions } from "mongodb";
+import { MongoClient } from "mongodb";
 
+// Get MongoDB URI from environment variables
 const uri = process.env.MONGODB_URI || "";
-// Fix: Use the correct property structure for MongoDB connection options
-const options: MongoClientOptions = {
-  // The dbName needs to be specified in the URI for older MongoDB driver versions
+
+// Parse the database name from the URI or default to "vibecart"
+function getDatabaseName(uri: string): string {
+  try {
+    // Try to extract database name from URI
+    const matches = uri.match(/\/([^/?]+)(\?|$)/);
+    if (matches && matches[1] && matches[1] !== 'admin') {
+      return matches[1];
+    }
+  } catch (error) {
+    console.error("Error parsing database name from URI:", error);
+  }
+  return "vibecart";
+}
+
+// Set MongoDB client options
+const options = {
+  useUnifiedTopology: true,
+  useNewUrlParser: true,
 };
 
-// Create a client with the database name specified in the URI
-const getMongoClient = () => {
-  // Append database name to URI if not already present
-  const dbUri = uri.includes('?') 
-    ? `${uri}&dbName=vibecart` 
-    : `${uri}?dbName=vibecart`;
-  
-  return new MongoClient(dbUri, options);
-};
+// Modify the URI to explicitly include the database name
+const modifiedUri = uri.includes('vibecart') ? uri : uri.replace(/\/([^/?]+)(\?|$)/, '/vibecart$2');
 
+// Log the database being used for debugging
+console.log(`[MongoDB] Using connection: ${modifiedUri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`);
+
+// MongoDB client setup
 let client;
 let clientPromise: Promise<MongoClient>;
 
 if (!process.env.MONGODB_URI) {
-  throw new Error("Please add your Mongo URI to .env.local");
+  throw new Error("Please add your MongoDB URI to .env.local");
 }
 
 if (process.env.NODE_ENV === "development") {
@@ -31,13 +45,13 @@ if (process.env.NODE_ENV === "development") {
   };
 
   if (!globalWithMongo._mongoClientPromise) {
-    client = getMongoClient();
+    client = new MongoClient(modifiedUri);
     globalWithMongo._mongoClientPromise = client.connect();
   }
   clientPromise = globalWithMongo._mongoClientPromise;
 } else {
   // In production mode, it's best to not use a global variable
-  client = getMongoClient();
+  client = new MongoClient(modifiedUri);
   clientPromise = client.connect();
 }
 
