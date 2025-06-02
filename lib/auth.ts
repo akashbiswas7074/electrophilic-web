@@ -1,5 +1,6 @@
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
-import { NextAuthOptions, User as NextAuthUser, Adapter } from "next-auth"; 
+import { NextAuthOptions, User as NextAuthUser } from "next-auth";
+import type { Adapter } from "next-auth/adapters"; 
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import clientPromise, { getDb } from "@/lib/mongodb"; 
