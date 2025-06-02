@@ -1,7 +1,20 @@
-import { MongoClient } from "mongodb";
+import { MongoClient, MongoClientOptions } from "mongodb";
 
 const uri = process.env.MONGODB_URI || "";
-const options = {};
+// Fix: Use the correct property structure for MongoDB connection options
+const options: MongoClientOptions = {
+  // The dbName needs to be specified in the URI for older MongoDB driver versions
+};
+
+// Create a client with the database name specified in the URI
+const getMongoClient = () => {
+  // Append database name to URI if not already present
+  const dbUri = uri.includes('?') 
+    ? `${uri}&dbName=vibecart` 
+    : `${uri}?dbName=vibecart`;
+  
+  return new MongoClient(dbUri, options);
+};
 
 let client;
 let clientPromise: Promise<MongoClient>;
@@ -18,13 +31,13 @@ if (process.env.NODE_ENV === "development") {
   };
 
   if (!globalWithMongo._mongoClientPromise) {
-    client = new MongoClient(uri, options);
+    client = getMongoClient();
     globalWithMongo._mongoClientPromise = client.connect();
   }
   clientPromise = globalWithMongo._mongoClientPromise;
 } else {
   // In production mode, it's best to not use a global variable
-  client = new MongoClient(uri, options);
+  client = getMongoClient();
   clientPromise = client.connect();
 }
 
