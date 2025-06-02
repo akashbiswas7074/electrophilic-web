@@ -207,7 +207,7 @@ export default function CheckoutComponent() {
           setUser(processedUserData); // Set the processed user state
           console.log("[CheckoutComponent] Processed user data:", processedUserData);
         } else {
-          console.error("[CheckoutComponent] User not found in database. Attempting to create/sync user...");
+          console.log("[CheckoutComponent] User not found in database. Attempting to sync user...");
           
           // Try to create/sync the user if session exists but user not found in DB
           if (session?.user) {
@@ -236,6 +236,7 @@ export default function CheckoutComponent() {
                   };
                   setUser(syncedUserData);
                   console.log("[CheckoutComponent] User synced successfully:", syncedUserData);
+                  toast.success("Profile synced successfully!", { duration: 2000 });
                 } else {
                   throw new Error('Failed to sync user data');
                 }
@@ -257,13 +258,14 @@ export default function CheckoutComponent() {
               };
               setUser(fallbackUserData);
               console.log("[CheckoutComponent] Using fallback user data from session:", fallbackUserData);
-              toast.warning("User profile partially loaded. Some features may be limited.");
+              toast.info("Profile loaded from session. Some features may be limited.", { duration: 3000 });
             }
           } else {
-            toast.error("Failed to load user details. Please refresh.");
-            setCheckoutError("User data could not be loaded. Please try logging in again.");
+            console.error("[CheckoutComponent] No session data available for fallback");
+            setCheckoutError("Authentication session expired. Please sign in again.");
             setIsLoading(false);
-            return; // Stop further processing if user data fails
+            setTimeout(() => router.push('/signin?callbackUrl=/checkout'), 2000);
+            return;
           }
         }
 
