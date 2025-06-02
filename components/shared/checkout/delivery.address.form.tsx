@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 
 const DeliveryAddressForm = ({ form }: { form: any }) => {
   const { pending } = useFormStatus();
-  const phoneValue = form.values.phoneNumber || "";
+  const phoneValue = form.values.phone || "";
 
   return (
     <div>
@@ -41,11 +41,11 @@ const DeliveryAddressForm = ({ form }: { form: any }) => {
         <Input
           id="phone"
           placeholder={phoneValue ? phoneValue : "Phone Number"}
-          {...form.getInputProps("phoneNumber")}
+          {...form.getInputProps("phone")}
           required
         />
-        {form.errors.phoneNumber && (
-          <p className="text-red-500 text-sm mt-1">{form.errors.phoneNumber}</p>
+        {form.errors.phone && (
+          <p className="text-red-500 text-sm mt-1">{form.errors.phone}</p>
         )}
         {phoneValue && (
           <p className="text-xs text-gray-500 mt-1">Using your registered phone number</p>
@@ -90,15 +90,15 @@ const DeliveryAddressForm = ({ form }: { form: any }) => {
         </div>
       </div>
       <div>
-        <label htmlFor="street">Street Address <span className="text-red-500">*</span></label>
+        <label htmlFor="address1">Street Address <span className="text-red-500">*</span></label>
         <Input
-          id="street"
+          id="address1"
           placeholder="Street Address"
-          {...form.getInputProps("street")}
+          {...form.getInputProps("address1")}
           required
         />
-        {form.errors.street && (
-          <p className="text-red-500 text-sm mt-1">{form.errors.street}</p>
+        {form.errors.address1 && (
+          <p className="text-red-500 text-sm mt-1">{form.errors.address1}</p>
         )}
       </div>
       <div>

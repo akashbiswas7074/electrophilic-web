@@ -21,6 +21,10 @@ function ErrorContent() {
             case 'Verification':
                 // This could be triggered by an invalid token, expired token, or already used token
                 return 'The sign-in link is no longer valid. It may have expired or already been used.';
+            case 'UseGoogleLogin':
+                return 'This email is registered with Google. Please use the Google sign-in option instead.';
+            case 'UsePhoneLogin':
+                return 'This account uses phone authentication. Please use the Phone sign-in option instead.';
             case 'OAuthSignin':
             case 'OAuthCallback':
             case 'OAuthCreateAccount':

@@ -279,16 +279,21 @@ export default function CheckoutComponent() {
             const addressData = await addressResponse.json();
             if (addressData.addresses && addressData.addresses.length > 0) {
               setUserAddresses(addressData.addresses);
-              // Find default or first address
+              
+              // Find default or first address - IMPROVED SELECTION LOGIC
               const defaultAddress = addressData.addresses.find((addr: Address) => addr.isDefault) || addressData.addresses[0];
-              setAddress(defaultAddress);
-              setSelectedAddressId(defaultAddress._id);
-              console.log("[CheckoutComponent] Addresses processed. Default/Selected:", defaultAddress._id);
-              // Auto-proceed only if a default address exists and is selected
+              
+              // Always ensure we have a selected address if addresses exist
               if (defaultAddress) {
+                setAddress(defaultAddress);
+                setSelectedAddressId(defaultAddress._id);
+                console.log("[CheckoutComponent] Address auto-selected:", defaultAddress._id);
+                
+                // Auto-proceed only if user has at least one address
                 setStep(2); // Move to coupon step if address is set
               } else {
-                setShowAddressForm(true); // Should not happen if addresses exist, but fallback
+                // This shouldn't happen if addresses exist, but as a fallback
+                setShowAddressForm(true);
               }
             } else {
               console.log("[CheckoutComponent] No addresses found via API, showing form.");
@@ -872,6 +877,14 @@ export default function CheckoutComponent() {
       return;
     }
 
+    // Ensure we have name values for Google auth users
+    const firstName = values.firstName || user?.firstName || session?.user?.firstName || session?.user?.name?.split(' ')[0] || '';
+    const lastName = values.lastName || user?.lastName || session?.user?.lastName || session?.user?.name?.split(' ').slice(1).join(' ') || '';
+    const phoneNumber = values.phone || user?.phone || '';
+
+    // Log values for debugging
+    console.log("[AddAddress] Submitting address with name:", firstName, lastName, "phone:", phoneNumber);
+
     const addressDataToSend = { 
       address1: values.address1,
       address2: values.address2,
@@ -880,9 +893,9 @@ export default function CheckoutComponent() {
       zipCode: values.zipCode,
       country: values.country,
       isDefault: values.isDefault,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      phoneNumber: values.phone,
+      firstName: firstName,
+      lastName: lastName,
+      phoneNumber: phoneNumber,
     };
 
     toast.loading("Saving address...");
@@ -907,6 +920,7 @@ export default function CheckoutComponent() {
         throw new Error("Failed to process new address from server.");
       }
 
+      // Update addresses list and select the new address
       setUserAddresses(prevAddresses => {
         let updatedAddresses = prevAddresses.filter(addr => addr._id !== newlySavedAddress._id); // Remove if existing (e.g. unlikely for add but safe)
 
@@ -1109,14 +1123,22 @@ export default function CheckoutComponent() {
                       <Label
                         key={addr._id}
                         htmlFor={`addr-${addr._id}`}
-                        className={`flex items-start p-4 border rounded-md cursor-pointer transition-colors hover:border-primary ${selectedAddressId === addr._id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-200'}`}
+                        className={`flex items-start p-4 border rounded-md cursor-pointer transition-all duration-200 hover:border-primary hover:shadow-sm ${
+                          selectedAddressId === addr._id
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-sm'
+                            : 'border-gray-200'
+                        }`}
                       >
                         <RadioGroupItem value={addr._id} id={`addr-${addr._id}`} className="mt-1" />
                         <div className="ml-3 flex-1">
                           <div className="flex justify-between items-start">
-                            <span className="font-medium text-sm">
-                              {addr.firstName} {addr.lastName} 
-                              {addr.isDefault && <span className="ml-2 text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">Default</span>}
+                            <span className="font-medium text-gray-800">
+                              {addr.firstName} {addr.lastName}
+                              {addr.isDefault && (
+                                <span className="ml-2 text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                                  Default
+                                </span>
+                              )}
                             </span>
                             <div className="flex space-x-2">
                               {!addr.isDefault && (
@@ -1124,7 +1146,10 @@ export default function CheckoutComponent() {
                                   variant="ghost"
                                   size="sm"
                                   className="text-xs h-auto p-1 text-primary hover:bg-primary/10"
-                                  onClick={(e) => { e.preventDefault(); handleSetDefaultAddress(addr._id); }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleSetDefaultAddress(addr._id);
+                                  }}
                                 >
                                   Set Default
                                 </Button>
@@ -1133,18 +1158,23 @@ export default function CheckoutComponent() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-xs h-auto p-1 text-red-500 hover:bg-red-50 hover:text-red-600"
-                                onClick={(e) => { e.preventDefault(); handleDeleteAddress(addr._id); }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDeleteAddress(addr._id);
+                                }}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {addr.address1}, {addr.address2 ? `${addr.address2}, ` : ""}{addr.city}, {addr.state} - {addr.zipCode}
-                          </p>
-                          {addr.phoneNumber && (
-                            <p className="text-sm text-muted-foreground mt-1">Phone: {addr.phoneNumber}</p>
-                          )}
+                          <div className="mt-1 text-sm text-gray-600">
+                            <p>
+                              {addr.address1}
+                              {addr.address2 ? <span>, {addr.address2}</span> : ""}
+                            </p>
+                            <p>{addr.city}, {addr.state} - {addr.zipCode}</p>
+                            {addr.phoneNumber && <p className="mt-1">Phone: {addr.phoneNumber}</p>}
+                          </div>
                         </div>
                       </Label>
                     ))}
@@ -1153,103 +1183,135 @@ export default function CheckoutComponent() {
 
                 {/* Address Form */}
                 {(userAddresses.length === 0 || showAddressForm) && (
-                  <form onSubmit={form.onSubmit(handleAddAddress)} className="space-y-4 border border-dashed p-4 rounded-md bg-gray-50">
-                    <h3 className="font-medium text-center text-gray-700">{userAddresses.length === 0 ? "Add your delivery address" : "Add a new address"}</h3>
+                  <form onSubmit={form.onSubmit(handleAddAddress)} className="space-y-5 border border-dashed p-6 rounded-md bg-gray-50/80 shadow-sm">
+                    <h3 className="font-medium text-center text-gray-800 mb-2">{userAddresses.length === 0 ? "Add your delivery address" : "Add a new address"}</h3>
+                    
                     {/* Form Fields */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
+                      <div className="space-y-1">
+                        <Label htmlFor="firstName" className="text-sm font-medium">First Name</Label>
                         <Input
-                          placeholder="First Name"
+                          id="firstName"
+                          placeholder="Enter your first name"
                           value={form.values.firstName}
                           onChange={(event) => form.setFieldValue('firstName', event.currentTarget.value)}
                           onBlur={() => form.validateField('firstName')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.firstName && <p className="text-red-500 text-xs mt-1">{form.errors.firstName}</p>}
                       </div>
-                      <div>
+                      <div className="space-y-1">
+                        <Label htmlFor="lastName" className="text-sm font-medium">Last Name</Label>
                         <Input
-                          placeholder="Last Name"
+                          id="lastName"
+                          placeholder="Enter your last name"
                           value={form.values.lastName}
                           onChange={(event) => form.setFieldValue('lastName', event.currentTarget.value)}
                           onBlur={() => form.validateField('lastName')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.lastName && <p className="text-red-500 text-xs mt-1">{form.errors.lastName}</p>}
                       </div>
                     </div>
-                    <div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="address1" className="text-sm font-medium">Address Line 1</Label>
                       <Input
-                        placeholder="Address Line 1 (House No, Building, Street, Area)"
+                        id="address1"
+                        placeholder="House No, Building, Street, Area"
                         value={form.values.address1}
                         onChange={(event) => form.setFieldValue('address1', event.currentTarget.value)}
                         onBlur={() => form.validateField('address1')}
                         required
+                        className="focus:border-primary"
                       />
                       {form.errors.address1 && <p className="text-red-500 text-xs mt-1">{form.errors.address1}</p>}
                     </div>
-                    <div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="address2" className="text-sm font-medium">Address Line 2 (Optional)</Label>
                       <Input
-                        placeholder="Address Line 2 (Optional)"
+                        id="address2"
+                        placeholder="Apartment, Suite, Floor, etc."
                         value={form.values.address2}
                         onChange={(event) => form.setFieldValue('address2', event.currentTarget.value)}
+                        className="focus:border-primary"
                       />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Changed grid for phone */}
-                      <div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="phone" className="text-sm font-medium">Phone Number</Label>
                         <Input
-                          placeholder="Phone Number"
+                          id="phone"
+                          placeholder="Your contact number"
                           type="tel"
                           value={form.values.phone}
                           onChange={(event) => form.setFieldValue('phone', event.currentTarget.value)}
                           onBlur={() => form.validateField('phone')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.phone && <p className="text-red-500 text-xs mt-1">{form.errors.phone}</p>}
                       </div>
-                      <div>
+                      <div className="space-y-1">
+                        <Label htmlFor="zipCode" className="text-sm font-medium">Zip Code</Label>
                         <Input
-                          placeholder="6-digit Zip Code"
+                          id="zipCode"
+                          placeholder="6-digit Zip/Postal Code"
                           value={form.values.zipCode}
                           onChange={(event) => form.setFieldValue('zipCode', event.currentTarget.value)}
                           onBlur={() => form.validateField('zipCode')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.zipCode && <p className="text-red-500 text-xs mt-1">{form.errors.zipCode}</p>}
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Changed grid for city/state */}
-                      <div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label htmlFor="city" className="text-sm font-medium">City</Label>
                         <Input
-                          placeholder="City"
+                          id="city"
+                          placeholder="Your city"
                           value={form.values.city}
                           onChange={(event) => form.setFieldValue('city', event.currentTarget.value)}
                           onBlur={() => form.validateField('city')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.city && <p className="text-red-500 text-xs mt-1">{form.errors.city}</p>}
                       </div>
-                      <div>
+                      <div className="space-y-1">
+                        <Label htmlFor="state" className="text-sm font-medium">State</Label>
                         <Input
-                          placeholder="State"
+                          id="state"
+                          placeholder="Your state"
                           value={form.values.state}
                           onChange={(event) => form.setFieldValue('state', event.currentTarget.value)}
                           onBlur={() => form.validateField('state')}
                           required
+                          className="focus:border-primary"
                         />
                         {form.errors.state && <p className="text-red-500 text-xs mt-1">{form.errors.state}</p>}
                       </div>
                     </div>
-                     <div>
-                       <Input
-                         placeholder="Country"
-                         value={form.values.country}
-                         onChange={(event) => form.setFieldValue('country', event.currentTarget.value)}
-                         // onBlur={() => form.validateField('country')} // No validation needed for disabled
-                         disabled
-                       />
-                       {/* No error display needed for disabled field */}
-                     </div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="country" className="text-sm font-medium">Country</Label>
+                      <Input
+                        id="country"
+                        placeholder="Country"
+                        value={form.values.country}
+                        onChange={(event) => form.setFieldValue('country', event.currentTarget.value)}
+                        disabled
+                        className="bg-gray-100"
+                      />
+                    </div>
+                    
                     <div className="flex items-center space-x-2 pt-2">
                       <Checkbox
                         id="isDefault"
@@ -1260,14 +1322,19 @@ export default function CheckoutComponent() {
                           form.setFieldValue('isDefault', newValue);
                         }}
                       />
-                      <Label htmlFor="isDefault" className="text-sm font-normal">Set as default delivery address</Label>
+                      <Label htmlFor="isDefault" className="text-sm font-normal cursor-pointer">Set as default delivery address</Label>
                     </div>
+                    
                     {/* Form Actions */}
                     <div className="flex justify-end gap-3 pt-3">
-                      {userAddresses.length > 0 && showAddressForm && ( // Show cancel only when adding new and others exist
+                      {userAddresses.length > 0 && showAddressForm && (
                         <Button type="button" variant="outline" onClick={handleCancelNewAddress} disabled={addAddressLoading}>Cancel</Button>
                       )}
-                      <Button type="submit" disabled={addAddressLoading || !form.isValid()}>
+                      <Button 
+                        type="submit" 
+                        disabled={addAddressLoading || !form.isValid()}
+                        className="bg-primary hover:bg-primary/90 transition-colors"
+                      >
                         {addAddressLoading ? <Loader className="animate-spin mr-2 h-4 w-4" /> : null}
                         Save Address
                       </Button>

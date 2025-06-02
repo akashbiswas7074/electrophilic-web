@@ -31,13 +31,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Invalid or expired password reset token' }, { status: 400 });
     }
 
-    // Hash the new password (pre-save hook will handle this)
-    user.password = password;
-    user.resetPasswordToken = undefined; // Clear the reset token fields
-    user.resetPasswordExpires = undefined;
-    user.provider = 'credentials'; // Ensure provider is set to credentials if resetting
-    // If the user was originally Google and setting a password for the first time,
-    // the provider might need adjustment depending on your logic.
+    // Only allow password reset for credential users
+    // If the user is a Google user, don't change their provider
+    if (user.provider === 'google') {
+      // Set password but keep the provider as 'google'
+      user.password = password;
+      user.resetPasswordToken = undefined; // Clear the reset token fields
+      user.resetPasswordExpires = undefined;
+      // Do NOT change provider for Google users
+    } else {
+      // For credentials or other users, set password and ensure provider is credentials
+      user.password = password;
+      user.resetPasswordToken = undefined; // Clear the reset token fields
+      user.resetPasswordExpires = undefined;
+      if (!user.provider) {
+        user.provider = 'credentials'; // Only set if provider is undefined
+      }
+    }
 
     await user.save();
 

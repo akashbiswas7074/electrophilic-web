@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -20,6 +20,7 @@ function SignInFormContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
+  const trigger = searchParams.get('trigger');
   const verified = searchParams.get('verified');
   const initialEmail = searchParams.get('email') || '';
   const initialTab = searchParams.get('tab') || 'email';
@@ -31,6 +32,16 @@ function SignInFormContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(error ? getErrorMessage(error) : null);
   const [successMessage, setSuccessMessage] = useState<string | null>(verified ? 'Email verified successfully! Please sign in.' : null);
+
+  // Check for Google trigger parameter and redirect if present
+  useEffect(() => {
+    if (trigger === 'google') {
+      toast.info('This account uses Google authentication. Redirecting to Google sign-in...');
+      setTimeout(() => {
+        signIn('google', { callbackUrl });
+      }, 1000);
+    }
+  }, [trigger, callbackUrl]);
 
   // Clear messages when user starts typing
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,6 +67,17 @@ function SignInFormContent() {
 
       if (result?.error) {
         console.error("Sign-in error:", result.error);
+        
+        // If error is UseGoogleLogin or OAuthAccountNotLinked, automatically redirect to Google signin
+        if (result.error === "UseGoogleLogin" || result.error === "OAuthAccountNotLinked") {
+          toast.info('Redirecting to Google login...');
+          // Small delay to show the toast before redirecting
+          setTimeout(() => {
+            signIn('google', { callbackUrl });
+          }, 500);
+          return;
+        }
+        
         setFormError(getErrorMessage(result.error));
         toast.error(getErrorMessage(result.error)); // Show toast notification
       } else if (result?.ok && result.url) {
@@ -75,18 +97,24 @@ function SignInFormContent() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  // Handle Google sign-in with better error handling
+  const handleGoogleSignIn = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
     setIsLoading(true);
+    
     try {
-      await signIn('google', { callbackUrl });
-      // Redirect is handled by NextAuth for OAuth
+      toast.info('Redirecting to Google sign-in...');
+      await signIn('google', { 
+        callbackUrl,
+        redirect: false 
+      });
+      // Note: The actual redirect will be handled by NextAuth
     } catch (error) {
       console.error("Google sign-in error:", error);
-      setFormError('Failed to initiate Google Sign-In.');
-      toast.error('Google Sign-In failed.');
+      setFormError('Failed to initiate Google sign-in. Please try again.');
+      toast.error('Google sign-in failed.');
       setIsLoading(false);
     }
-    // No need for finally setIsLoading(false) here as the page will redirect
   };
 
   return (
@@ -231,19 +259,19 @@ function SignInFormContent() {
                     </div>
                   </div>
 
-                  <Button 
-                    variant="outline" 
-                    className="w-full flex items-center justify-center gap-2" 
-                    onClick={handleGoogleSignIn} 
+                  <Button
+                    className="w-full flex items-center justify-center gap-2 bg-white text-black hover:bg-gray-100 border border-gray-300"
+                    onClick={handleGoogleSignIn}
                     disabled={isLoading}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
-                      <path fill="#EA4335" d="M12 5.04c2.17 0 4.1.89 5.5 2.3l3.5-3.5C18.73 1.56 15.55 0 12 0 7.31 0 3.23 2.7 1.24 6.67l4.07 3.16C6.42 7.1 9 5.04 12 5.04z"></path>
-                      <path fill="#4285F4" d="M23.54 12.27c0-.96-.08-1.9-.25-2.8H12v5.22h6.44c-.26 1.56-1.1 2.9-2.37 3.78v3.13h3.84C22.12 19.39 23.54 16.13 23.54 12.27z"></path>
-                      <path fill="#FBBC05" d="M5.3 14.67l-4.07 3.16C2.24 21.8 6.8 24 12 24c3.2 0 5.9-1.06 7.86-2.87l-3.84-3.13c-1.08.72-2.46 1.16-4.02 1.16-3.1 0-5.73-2.1-6.67-4.92H5.3v.43z"></path>
-                      <path fill="#34A853" d="M12 24c5.04 0 9.27-1.62 12-4.87l-5.04-4.02c-1.4.94-3.19 1.5-5.04 1.5-3.87 0-7.15-2.61-8.33-6.12H.06v4.13C3.05 21.29 7.2 24 12 24z"></path>
-                    </svg>
-                    {isLoading ? 'Redirecting...' : 'Sign In with Google'}
+                    <Image
+                      src="/google.svg" 
+                      alt="Google"
+                      width={20}
+                      height={20}
+                      className="mr-2"
+                    />
+                    {isLoading ? 'Signing in...' : 'Sign in with Google'}
                   </Button>
                 </TabsContent>
                 
@@ -278,6 +306,10 @@ function getErrorMessage(error: string): string {
   switch (error) {
     case 'CredentialsSignin':
       return 'Invalid email or password. Please try again.';
+    case 'UseGoogleLogin':
+      return 'This email is registered with Google. Please use the "Sign In with Google" button instead.';
+    case 'UsePhoneLogin':
+      return 'This email is associated with a phone login. Please use the Phone tab to sign in.';
     case 'OAuthAccountNotLinked':
       // This error might occur if a user tries to sign in with Google after signing up with email/password
       // Or vice-versa. You might want to guide them on how to link accounts if you implement that.

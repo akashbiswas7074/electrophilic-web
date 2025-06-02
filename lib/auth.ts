@@ -9,6 +9,36 @@ import User, { IUser } from "@/lib/database/models/user.model";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+// Define extended User type that includes our custom properties
+interface ExtendedUser extends NextAuthUser {
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  provider?: string;
+  role?: string;
+  phone?: string;
+  [key: string]: any; // Allow for other properties
+}
+
+// Define Google OAuth profile type with specific Google fields
+interface GoogleProfile {
+  iss?: string;
+  azp?: string;
+  aud?: string;
+  sub: string;
+  email: string;
+  email_verified?: boolean;
+  at_hash?: string;
+  name: string;
+  given_name?: string;
+  family_name?: string;
+  picture?: string;
+  locale?: string;
+  iat?: number;
+  exp?: number;
+  [key: string]: any; // Allow for other properties
+}
+
 // Define type for user data
 interface AdapterUser {
   email: string;
@@ -20,9 +50,26 @@ interface AdapterUser {
 const customAdapter = (options = {}): Adapter => {
   return {
     ...MongoDBAdapter(clientPromise, options),
-    // Override the createUser function to log the operation
+    // Override the createUser function to ensure provider field is set correctly
     async createUser(data: AdapterUser) {
       console.log("[Auth] Creating user in vibecart database:", data.email);
+      
+      // Ensure provider field is set when creating users through adapter
+      if (!data.provider) {
+        // Default to 'google' if there's no provider but we have a picture (likely from Google OAuth)
+        if (data.image) {
+          data.provider = 'google';
+        } else {
+          data.provider = 'credentials';
+        }
+      }
+      
+      // Ensure emailVerified is set for Google users
+      if (data.provider === 'google' && !data.emailVerified) {
+        data.emailVerified = new Date();
+        console.log(`[Auth] Auto-set emailVerified for Google user: ${data.email}`);
+      }
+      
       const db = await getDb();
       const result = await db.collection('users').insertOne(data);
       return { ...data, id: result.insertedId.toString() };
@@ -37,24 +84,30 @@ export const authOptions: NextAuthOptions = {
   // Configure one or more authentication providers
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-       // Optional: Customize profile data if needed
-       profile(profile) {
-        // console.log("Google Profile:", profile);
-        // You might need to map fields if Google profile structure changes
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      profile(profile: GoogleProfile) {
+        // Ensure provider is set in user object with additional fields
         return {
-          id: profile.sub, // Use 'sub' as the unique ID
-          firstName: profile.given_name, // Changed from name
-          lastName: profile.family_name, // Added
+          id: profile.sub,
+          name: profile.name,
           email: profile.email,
           image: profile.picture,
-          // Add username generation if desired, e.g., from email or a default
-          username: profile.email?.split('@')[0] || `user_${profile.sub.substring(0, 6)}`,
-          // Ensure email_verified is handled if needed
-          emailVerified: profile.email_verified ? new Date() : null,
-        };
+          firstName: profile.given_name,
+          lastName: profile.family_name,
+          provider: 'google', // Always explicitly set provider to 'google'
+          emailVerified: new Date(), // Mark email as verified for Google users
+          role: 'user', // Set default role for Google users
+          updatedAt: new Date() // Set update date
+        }
       },
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
     }),
     CredentialsProvider({
       id: "credentials",
@@ -145,8 +198,13 @@ export const authOptions: NextAuthOptions = {
           // Check if user uses credentials provider and has a password
           if (user.provider !== 'credentials') {
             console.warn(`[Auth Warn] User ${user.email} uses provider '${user.provider}', not 'credentials'.`);
-            // Consider throwing a specific error or returning a specific code if you want to handle this differently on the frontend
-            return null; // Not a credentials user
+            // Return specific error for each provider to guide users to the correct sign-in method
+            if (user.provider === 'google') {
+              throw new Error("UseGoogleLogin"); // Custom error to direct users to Google login
+            } else if (user.provider === 'phone') {
+              throw new Error("UsePhoneLogin"); // Custom error to direct users to phone login
+            }
+            return null; // Not a credentials user with unknown provider
           }
 
           if (!user.password) {
@@ -293,117 +351,272 @@ export const authOptions: NextAuthOptions = {
 
   // Callbacks for JWT and session handling
   callbacks: {
-    // Modify the JWT token
-    async jwt({ token, user, account, profile, isNewUser }) {
-      // On successful sign in, persist the user id, username, and image to the token
-      if (user) { // user object is available after authorize or initial OAuth profile mapping
-        token.id = user.id;
-        token.username = user.username;
-        token.firstName = user.firstName; // Added
-        token.lastName = user.lastName; // Added
-        if (user.email) { // Ensure email from user object is put into token.email
-          token.email = user.email;
-        }
-        if (user.image) {
-          token.picture = user.image; // Ensure image from user object is put into token.picture
-        }
-        // Add role from user object if available
-        if ((user as any).role) {
-          token.role = (user as any).role;
-        }
-      }
-       // If signing in with Google, ensure user exists in DB or create/update
-       // This part also updates token.picture from dbUser.image
-       if (account?.provider === 'google' && profile) {
-         try {
-            await connectToDatabase();
-            let dbUser = await User.findOne({ email: profile.email });
-            if (!dbUser) {
-                dbUser = await User.create({
-                    // id: profile.sub, // Adapter handles ID generation primarily
-                    firstName: (profile as any).given_name,
-                    lastName: (profile as any).family_name,
-                    email: profile.email,
-                    image: (profile as any).picture, // Cast to any
-                    username: profile.email?.split('@')[0] || `user_${(profile as any).sub?.substring(0, 6)}`,
-                    provider: 'google',
-                    emailVerified: (profile as any).email_verified ? new Date() : null,
-                });
-                console.log("New Google user created:", dbUser.email);
-            } else {
-                 if ((profile as any).picture && dbUser.image !== (profile as any).picture) { // Cast to any
-                     dbUser.image = (profile as any).picture; // Cast to any
-                     await dbUser.save();
-                 }
-                 // Ensure firstName and lastName are updated if they were missing or different
-                 if ((profile as any).given_name && dbUser.firstName !== (profile as any).given_name) {
-                    dbUser.firstName = (profile as any).given_name;
-                 }
-                 if ((profile as any).family_name && dbUser.lastName !== (profile as any).family_name) {
-                    dbUser.lastName = (profile as any).family_name;
-                 }
-                 if (dbUser.isModified('firstName') || dbUser.isModified('lastName')) {
-                    await dbUser.save();
-                 }
+        // Modify the JWT token
+        async jwt ({ token, user, account, profile, isNewUser }) {
+            // On successful sign in, persist the user id, username, and image to the token
+            if (user) {
+                // Cast user to our ExtendedUser type to access custom properties
+                const extendedUser = user as ExtendedUser;
+                
+                token.id = extendedUser.id;
+                token.username = extendedUser.username;
+                token.firstName = extendedUser.firstName; // Added
+                token.lastName = extendedUser.lastName; // Added
+                token.provider = extendedUser.provider || account?.provider || 'default';
+                if (extendedUser.email) {
+                    token.email = extendedUser.email;
+                }
+                if (extendedUser.image) {
+                    token.picture = extendedUser.image; // Ensure image from user object is put into token.picture
+                }
+                // Add role from user object if available
+                if (extendedUser.role) {
+                    token.role = extendedUser.role;
+                }
+                // Add phone to token if available
+                if (extendedUser.phone) {
+                    token.phone = extendedUser.phone;
+                }
             }
-            token.id = dbUser._id.toString();
-            token.username = dbUser.username;
-            token.firstName = dbUser.firstName; // Added
-            token.lastName = dbUser.lastName; // Added
-            token.picture = dbUser.image; // Ensure token.picture is set from dbUser.image
-            token.role = dbUser.role; // Add role to token for Google users
-         } catch (error) {
-             console.error("Error handling Google user in DB:", error);
-         }
-       }
-      return token;
-    },
+            
+            // If signing in with Google, ensure user exists in DB or create/update with proper error handling
+            if (account?.provider === 'google' && profile) {
+                try {
+                    await connectToDatabase();
+                    
+                    // Cast profile to GoogleProfile type
+                    const googleProfile = profile as GoogleProfile;
+                    
+                    // Use email from profile if available or from token as fallback
+                    const email = googleProfile.email || token.email;
+                    if (!email) {
+                        console.error("No email found in Google profile or token");
+                        return token;
+                    }
+                    
+                    let dbUser = await User.findOne({ email });
+                    
+                    if (!dbUser) {
+                        // Create new user with Google profile data
+                        try {
+                            dbUser = await User.create({
+                                firstName: googleProfile.given_name || googleProfile.name?.split(' ')[0] || 'Google',
+                                lastName: googleProfile.family_name || googleProfile.name?.split(' ').slice(1).join(' ') || 'User',
+                                email: email,
+                                image: googleProfile.picture || null,
+                                username: email.split('@')[0] || `user_${Date.now().toString().substring(0, 6)}`,
+                                provider: 'google',
+                                emailVerified: new Date(), // Google emails are verified
+                                role: 'user', // Default role
+                                updatedAt: new Date(), // Set update date
+                                createdAt: new Date() // Set creation date
+                            });
+                            console.log("New Google user created:", email);
+                        } catch (createError) {
+                            console.error("Error creating Google user:", createError);
+                            // Return token without modifications if user creation fails
+                            return token;
+                        }
+                    } else {
+                        // Update existing user with any new Google profile data
+                        let isModified = false;
+                        
+                        if (googleProfile.picture && dbUser.image !== googleProfile.picture) {
+                            dbUser.image = googleProfile.picture;
+                            isModified = true;
+                        }
+                        
+                        // Ensure firstName and lastName are updated if they were missing or different
+                        if (googleProfile.given_name && dbUser.firstName !== googleProfile.given_name) {
+                            dbUser.firstName = googleProfile.given_name;
+                            isModified = true;
+                        }
+                        
+                        if (googleProfile.family_name && dbUser.lastName !== googleProfile.family_name) {
+                            dbUser.lastName = googleProfile.family_name;
+                            isModified = true;
+                        }
+                        
+                        // Update provider if it wasn't google before
+                        if (dbUser.provider !== 'google') {
+                            dbUser.provider = 'google';
+                            isModified = true;
+                            console.log(`Updated provider for user ${dbUser.email} to google`);
+                        }
+                        
+                        // Ensure email is verified for Google users
+                        if (!dbUser.emailVerified) {
+                            dbUser.emailVerified = new Date();
+                            isModified = true;
+                        }
+                        
+                        // Ensure role is set for Google users
+                        if (!dbUser.role) {
+                          dbUser.role = 'user';
+                          isModified = true;
+                        }
+                        
+                        // Always update the updatedAt timestamp for Google users on sign-in
+                        dbUser.updatedAt = new Date();
+                        isModified = true;
+                        
+                        // Save if anything changed
+                        if (isModified) {
+                            try {
+                                await dbUser.save();
+                                console.log(`Updated Google user data for: ${dbUser.email}`);
+                            } catch (saveError) {
+                                console.error(`Error saving Google user updates:`, saveError);
+                            }
+                        }
+                    }
+                    
+                    // Ensure token has all the latest user information
+                    if (dbUser) {
+                        token.id = dbUser._id.toString();
+                        token.username = dbUser.username || email.split('@')[0];
+                        token.firstName = dbUser.firstName || googleProfile.given_name || 'Google';
+                        token.lastName = dbUser.lastName || googleProfile.family_name || 'User';
+                        token.picture = dbUser.image || googleProfile.picture;
+                        token.role = dbUser.role || 'user';
+                        token.provider = 'google';
+                        token.email = dbUser.email || email;
+                    }
+                } catch (error) {
+                    console.error("Error handling Google user in DB:", error);
+                    // Return token without modifications if DB operations fail
+                }
+            }
+            
+            return token;
+        },
 
     // Modify the session object
     async session({ session, token }) {
       // Send properties to the client, like user id, username, and image from the token
       if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.username = token.username as string;
-        session.user.firstName = token.firstName as string; // Added
-        session.user.lastName = token.lastName as string; // Added
-        if (token.email) { // Explicitly set email from token
-          session.user.email = token.email as string;
+        // Ensure we never assign undefined values to the session
+        session.user.id = token.id || '';
+        session.user.username = token.username || '';
+        session.user.firstName = token.firstName || '';
+        session.user.lastName = token.lastName || '';
+        session.user.provider = token.provider as string || 'default';
+        
+        // Ensure email and image are passed through
+        if (token.email) {
+          session.user.email = token.email;
         }
         if (token.picture) {
-          session.user.image = token.picture as string; // Pass image URL to session.user.image
+          session.user.image = token.picture;
         }
         // Add role from token to session
         if (token.role) {
-          (session.user as any).role = token.role as string;
+          session.user.role = token.role;
         }
         // Add phone to session
         if (token.phone) {
-          (session.user as any).phone = token.phone as string;
+          session.user.phone = token.phone;
         }
       }
       return session;
     },
 
      // Handle user creation/linking during OAuth sign-in via adapter
-     // The adapter's createUser/linkAccount methods handle this.
-     // You can add custom logic in the 'signIn' callback if needed.
      async signIn({ user, account, profile, email, credentials }) {
+        // Handle credentials provider (email/password) sign in
         if (account?.provider === 'credentials') {
-            // For credentials, check if email is verified before allowing sign in
-            await connectToDatabase();
-            const dbUser = await User.findOne({ email: user.email });
-            if (dbUser && !dbUser.emailVerified) {
-                console.log(`Sign-in blocked for ${user.email}: Email not verified.`);
-                // You could redirect to a specific page or return false to block sign-in
-                // throw new Error("Email not verified"); // This shows a generic error page
-                return '/auth/verify-email-notice'; // Redirect to a notice page
+            try {
+                await connectToDatabase();
+                
+                // Check if user exists but uses a different provider (e.g., Google)
+                const dbUser = await User.findOne({ email: user.email });
+                
+                // If user exists but with Google provider, return special URL to trigger redirect
+                if (dbUser && dbUser.provider === 'google') {
+                    console.log(`User ${user.email} exists with Google provider. Triggering redirect.`);
+                    // This will be caught by the client to redirect to Google sign-in
+                    return '/auth/signin?trigger=google';
+                }
+                
+                // Original email verification logic
+                if (dbUser && !dbUser.emailVerified) {
+                    console.log(`Sign-in blocked for ${user.email}: Email not verified.`);
+                    return '/auth/verify-email-notice';
+                }
+            } catch (error) {
+                console.error("Error in credentials sign-in flow:", error);
+                // Continue with sign-in despite errors to avoid blocking users
+                return true;
             }
         }
-        // Allow sign-in for other providers or verified credential users
+        
+        // Handle Google provider sign-in
         if (account?.provider === "google") {
-          return true; // Allow sign-in for Google
+          try {
+            await connectToDatabase();
+            
+            // Cast profile to GoogleProfile type
+            const googleProfile = profile as GoogleProfile;
+            
+            // Use email from profile to find user
+            const email = googleProfile?.email || user.email;
+            if (!email) {
+              console.error("No email available from Google authentication");
+              return true; // Continue but log the error
+            }
+            
+            // Check if user with this email already exists
+            let existingUser = await User.findOne({ email });
+            
+            if (existingUser) {
+              console.log(`Google login: User ${email} already exists in DB`);
+              
+              // Update provider regardless of current value to ensure consistency
+              // This fixes issues where Google users may not have provider set
+              if (existingUser.provider !== 'google') {
+                console.log(`Updating user ${email} provider from ${existingUser.provider} to google`);
+                try {
+                  existingUser.provider = 'google';
+                  
+                  // Also update profile data if needed
+                  if (googleProfile.picture && existingUser.image !== googleProfile.picture) {
+                    existingUser.image = googleProfile.picture;
+                  }
+                  
+                  if (googleProfile.given_name && (!existingUser.firstName || existingUser.firstName !== googleProfile.given_name)) {
+                    existingUser.firstName = googleProfile.given_name;
+                  }
+                  
+                  if (googleProfile.family_name && (!existingUser.lastName || existingUser.lastName !== googleProfile.family_name)) {
+                    existingUser.lastName = googleProfile.family_name;
+                  }
+                  
+                  // Ensure email is verified for Google users
+                  if (!existingUser.emailVerified) {
+                    existingUser.emailVerified = new Date();
+                  }
+                  
+                  await existingUser.save();
+                  console.log(`Successfully updated Google user data for ${email}`);
+                } catch (updateError) {
+                  console.error(`Failed to update user ${email} provider to google:`, updateError);
+                  // Continue with sign-in despite the error
+                }
+              }
+            } else {
+              // New user will be created - explicitly set provider here to ensure it's saved
+              console.log(`Google login: New user ${email} will be created with provider 'google'`);
+              // Provider is set in the profile method but we log it here for clarity
+            }
+            
+            return true;
+          } catch (error) {
+            console.error("Error in Google sign-in flow:", error);
+            return true; // Continue with sign-in despite errors to avoid blocking users
+          }
         }
+        
+        // Phone authentication or any other provider
         return true;
      },
 

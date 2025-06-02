@@ -135,6 +135,30 @@ UserSchema.pre<IUser>("save", async function (next) {
   }
 });
 
+// Ensure Google users always have emailVerified set to a Date
+UserSchema.pre<IUser>("save", function (next) {
+  // If this is a Google user and emailVerified is null or undefined, set it to current date
+  if (this.provider === 'google' && !this.emailVerified) {
+    this.emailVerified = new Date();
+    console.log(`[User Model] Auto-verified email for Google user: ${this.email}`);
+  }
+  
+  // If the user is trying to add an address and has an incomplete name, fill it in
+  if (this.address && this.address.length > 0) {
+    this.address.forEach(addr => {
+      // If the address is missing first name or last name, use the user's name
+      if (!addr.firstName && this.firstName) {
+        addr.firstName = this.firstName;
+      }
+      if (!addr.lastName && this.lastName) {
+        addr.lastName = this.lastName;
+      }
+    });
+  }
+  
+  next();
+});
+
 // Method to compare password for login (ensure 'this' context is correct)
 UserSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
   // Need to explicitly select the password field if it's `select: false`
