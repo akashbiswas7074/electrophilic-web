@@ -1,16 +1,37 @@
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
-import { NextAuthOptions, User as NextAuthUser } from "next-auth"; 
+import { NextAuthOptions, User as NextAuthUser, Adapter } from "next-auth"; 
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import clientPromise from "@/lib/mongodb"; 
+import clientPromise, { getDb } from "@/lib/mongodb"; 
 import { connectToDatabase } from "@/lib/database/connect";
 import User, { IUser } from "@/lib/database/models/user.model"; 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+// Define type for user data
+interface AdapterUser {
+  email: string;
+  emailVerified?: Date | null;
+  [key: string]: any; // Allow for other properties
+}
+
+// Custom MongoDB adapter with explicit database name
+const customAdapter = (options = {}): Adapter => {
+  return {
+    ...MongoDBAdapter(clientPromise, options),
+    // Override the createUser function to log the operation
+    async createUser(data: AdapterUser) {
+      console.log("[Auth] Creating user in vibecart database:", data.email);
+      const db = await getDb();
+      const result = await db.collection('users').insertOne(data);
+      return { ...data, id: result.insertedId.toString() };
+    }
+  };
+};
+
 export const authOptions: NextAuthOptions = {
-  // Use the MongoDB adapter with the client promise
-  adapter: MongoDBAdapter(clientPromise),
+  // Use our custom MongoDB adapter
+  adapter: customAdapter(),
 
   // Configure one or more authentication providers
   providers: [
