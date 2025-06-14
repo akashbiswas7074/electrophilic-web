@@ -10,7 +10,7 @@ import Image from 'next/image';
 
 function ErrorContent() {
     const searchParams = useSearchParams();
-    const error = searchParams.get('error');
+    const error = searchParams?.get('error') || null;
 
     const getErrorMessage = (errorCode: string | null): string => {
         switch (errorCode) {

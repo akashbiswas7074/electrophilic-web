@@ -1,6 +1,5 @@
 'use client'; // Add this directive
 import React from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 import useEmblaCarousel from 'embla-carousel-react'; // Import Embla Carousel hook
 import { Button } from "@/components/ui/button"; // Import Button for navigation
@@ -17,9 +16,10 @@ interface SubCategory {
 interface SubCategoryShowcaseProps {
   subCategories: SubCategory[];
   title?: string; // Optional title
+  onSubcategoryClick?: (subcategoryName: string) => void; // Callback for subcategory click
 }
 
-const SubCategoryShowcase: React.FC<SubCategoryShowcaseProps> = ({ subCategories = [], title = "Shop By Collections" }) => {
+const SubCategoryShowcase: React.FC<SubCategoryShowcaseProps> = ({ subCategories = [], title = "Shop By Collections", onSubcategoryClick }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { 
       loop: true, 
@@ -80,7 +80,15 @@ const SubCategoryShowcase: React.FC<SubCategoryShowcaseProps> = ({ subCategories
                 // Adjust slide width: 1 on xs, 2 on sm, 3 on md+
                 className="embla__slide flex-[0_0_90%] sm:flex-[0_0_calc(100%/2.1)] md:flex-[0_0_calc(100%/3.1)] lg:flex-[0_0_calc(100%/3.1)] xl:flex-[0_0_calc(100%/3.1)] px-2 sm:px-3"
               >
-                <Link href={`/shop/subCategory/${subCategory._id}?name=${subCategory.name}`} className="group block relative aspect-[4/3] w-full overflow-hidden bg-gray-200">
+                <div 
+                  className="group block relative aspect-[4/3] w-full overflow-hidden bg-gray-200 cursor-pointer"
+                  onClick={() => {
+                    // Instead of navigating, trigger a filter action to show subcategory products
+                    if (onSubcategoryClick) {
+                      onSubcategoryClick(subCategory.name);
+                    }
+                  }}
+                >
                   <Image
                     src={imageUrl}
                     alt={subCategory.name}
@@ -93,7 +101,7 @@ const SubCategoryShowcase: React.FC<SubCategoryShowcaseProps> = ({ subCategories
                       {subCategory.name}
                     </span>
                   </div>
-                </Link>
+                </div>
               </div>
             );
           })}

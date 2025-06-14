@@ -1,15 +1,11 @@
 // ISR(CACHE) - 1 HOUR
 import React, { JSX } from "react"; // Modified to import JSX namespace
-import BestSellingProducts from "@/components/sections/BestSellingProducts";
-import BannerCarousel from "@/components/shared/home/BannerCarousel";
 import StrengthTakesSweat from "@/components/shared/home/StrengthTakesSweat"; 
 import BlogImages from "@/components/shared/home/BlogImages";
-import CrazyDeals from "@/components/shared/home/CrazyDeals";
-import FeaturedProducts from "@/components/shared/home/FeaturedProducts";
 import NeedOfWebsite from "@/components/shared/home/NeedOfWebsite";
-import SpecialCombos from "@/components/shared/home/SpecialCombos";
 import Hero from "@/components/sections/Hero";
 import DynamicHeroSection from "@/components/shared/home/DynamicHeroSection";
+import ReviewSection from "@/components/shared/home/ReviewSection"; // Added import for ReviewSection
 import {
   getAllHomeScreenOffers
 } from "@/lib/database/actions/homescreenoffers.actions";
@@ -20,23 +16,30 @@ import {
   getAllProducts,
 } from "@/lib/database/actions/product.actions";
 import { getAllSubCategories } from "@/lib/database/actions/subCategory.actions";
-import FeaturedShowcase from "@/components/sections/FeaturedShowcase";
 import { ProductCardSmall } from "@/components/shared/product/ProductCardSmall";
 import { getAllCategories } from "@/lib/database/actions/categories.actions";
-import CategoryShowcase from "@/components/sections/CategoryShowcase";
-import SubCategoryShowcase from "@/components/sections/SubCategoryShowcase";
 import ProductCarousel from "@/components/shared/home/ProductCarousel";
-import ToughShoeHero from "@/components/shared/home/ToughShoeHero";
 import { getPublicFeaturedVideos } from "@/lib/database/actions/featured.video.actions";
-import FeaturedVideoSection from "@/components/shared/home/FeaturedVideoSection";
-import AllProductsSection from "@/components/shared/home/AllProductsSection";
-import CategoryProductSection from "@/components/sections/CategoryProductSection";
 import { getCategorySectionsWithProducts } from "@/lib/database/actions/category-sections.actions";
 import { getVisibleWebsiteSections } from "@/lib/database/actions/website.section.actions"; 
 import { getActiveHeroSections } from "@/lib/database/actions/hero-section.actions";
-import BestsellingSection from "@/components/shared/home/BestsellingSection";
-import NewArrivalsSection from "@/components/shared/home/NewArrivalsSection";
-import FeaturedProductsSection from "@/components/shared/home/FeaturedProductsSection";
+
+// Import lazy loading components
+import {
+  LazyBestSellingProducts,
+  LazyFeaturedProducts,
+  LazyNewArrivals,
+  LazyBannerCarousel,
+  LazyCategoryShowcase,
+  LazySpecialCombos,
+  LazyCrazyDeals,
+  LazyFeaturedShowcase,
+  LazyFeaturedVideoSection,
+  LazySubCategoryShowcase,
+  LazyCategoryProductSection,
+  LazyAllProductsSection,
+  LazyToughShoeHero
+} from "@/components/shared/home/LazySections";
 
 // Define the type for an individual offer based on your HomeScreenOffer model
 interface HomeScreenOfferType {
@@ -395,7 +398,7 @@ export default async function Home() {
           
           // Calculate price
           const price = sizes.length > 0 
-            ? Math.min(...sizes.filter((s: { size: string; price: number; qty: number }) => s.price > 0).map((s: { size: string; price: number; qty: number }) => s.price)) || 0 
+            ? Math.min(...sizes.filter((s: { size: string; price: number; qty: number }) => s.price > 0).map((s: { size: string; price: number, qty: number }) => s.price)) || 0 
             : (parseFloat(subProduct.price) || parseFloat(product.price) || 0);
           
           // Get image
@@ -543,13 +546,13 @@ export default async function Home() {
 
   // Map section IDs to their components
   const sectionComponents = {
-    'banner-carousel': <div className="h-[50%]"><BannerCarousel /></div>,
+    'banner-carousel': <LazyBannerCarousel />,
     'strength-takes-sweat': <StrengthTakesSweat />,
     'featured-products': featuredProducts.length > 0 ? (
-      <FeaturedProductsSection products={featuredProducts} />
+      <LazyFeaturedProducts products={featuredProducts} />
     ) : null,
     'featured-showcase': featuredProducts.length > 0 ? (
-      <FeaturedShowcase
+      <LazyFeaturedShowcase
         featuredProducts={featuredProducts.slice(0, 3).map((product: TransformedProduct) => ({
           _id: product.id,
           name: product.name,
@@ -558,10 +561,10 @@ export default async function Home() {
         }))}
       />
     ) : null,
-    'special-combos': <SpecialCombos comboData={specialCombosData} />,
-    'category-showcase': allCategories?.length > 0 ? <CategoryShowcase categories={allCategories} /> : null,
+    'special-combos': <LazySpecialCombos comboData={specialCombosData} />,
+    'category-showcase': allCategories?.length > 0 ? <LazyCategoryShowcase categories={allCategories} /> : null,
     'sub-category-showcase': subCategories?.length > 0 ? (
-      <SubCategoryShowcase 
+      <LazySubCategoryShowcase 
         subCategories={subCategories.slice(0, 3)}
         title="Shop By Collections" 
       />
@@ -569,7 +572,7 @@ export default async function Home() {
     'category-product-sections': categorySections.length > 0 ? (
       <>
         {categorySections.map((section: any) => (
-          <CategoryProductSection
+          <LazyCategoryProductSection
             key={section._id}
             title={section.title}
             categoryName={section.category.name}
@@ -580,34 +583,31 @@ export default async function Home() {
         ))}
       </>
     ) : null,
-    // 'bestsellers': topSelling.length > 0 ? (
-    //   <BestsellingSection products={topSelling} />
-    // ) : null,
     'bestsellers': topSelling.length > 0 ? (
-      <BestSellingProducts />
+      <LazyBestSellingProducts />
     ) : (
-      // Fallback: use the standalone BestSellingProducts component
-      <BestSellingProducts />
+      <LazyBestSellingProducts />
     ),
-    'crazy-deals': <CrazyDeals dealsData={crazyDealsData} />,
-    'tough-shoe-hero': <ToughShoeHero />,
+    'crazy-deals': <LazyCrazyDeals dealsData={crazyDealsData} />,
+    'tough-shoe-hero': <LazyToughShoeHero />,
     'new-arrivals': newArrivals.length > 0 ? (
       <div id="new-arrivals">
-        <NewArrivalsSection products={newArrivals} />
+        <LazyNewArrivals products={newArrivals} />
       </div>
     ) : (
       // Fallback: show all products as new arrivals if no specific new arrivals found
       allProducts.length > 0 ? (
         <div id="new-arrivals">
-          <NewArrivalsSection products={allProducts.slice(0, 8)} />
+          <LazyNewArrivals products={allProducts.slice(0, 8)} />
         </div>
       ) : null
     ),
+    'top-reviews': <ReviewSection />, // Added Top Reviews section component
     'featured-videos': featuredVideos && featuredVideos.length > 0 ? (
-      <FeaturedVideoSection videos={featuredVideos} />
+      <LazyFeaturedVideoSection videos={featuredVideos} />
     ) : null,
     'all-products': allProducts.length > 0 ? (
-      <AllProductsSection products={allProducts} />
+      <LazyAllProductsSection products={allProducts} />
     ) : null,
     'collection-highlights': (
       <div className="my-20">
@@ -669,14 +669,12 @@ export default async function Home() {
         ) : (
           // Fallback to a default order if no sections are configured
           <>
-            <div className="h-[50%]">
-              <BannerCarousel />
-            </div>
+            <LazyBannerCarousel />
             
             <StrengthTakesSweat />
             <div className="relative z-10">
               {featuredProducts.length > 0 ? (
-                <FeaturedShowcase
+                <LazyFeaturedShowcase
                   featuredProducts={featuredProducts.slice(0, 3).map((product: TransformedProduct) => ({
                     _id: product.id,
                     name: product.name,
@@ -688,17 +686,17 @@ export default async function Home() {
             </div>
 
             <div className="relative z-0">
-              <SpecialCombos comboData={specialCombosData} />
-              {allCategories?.length > 0 && <CategoryShowcase categories={allCategories} />}
+              <LazySpecialCombos comboData={specialCombosData} />
+              {allCategories?.length > 0 && <LazyCategoryShowcase categories={allCategories} />}
               {subCategories?.length > 0 && (
-                <SubCategoryShowcase 
+                <LazySubCategoryShowcase 
                   subCategories={subCategories.slice(0, 3)}
                   title="Shop By Collections" 
                 />
               )}
               
               {categorySections.length > 0 && categorySections.map((section: any) => (
-                <CategoryProductSection
+                <LazyCategoryProductSection
                   key={section._id}
                   title={section.title}
                   categoryName={section.category.name}
@@ -710,25 +708,28 @@ export default async function Home() {
 
               {topSelling.length > 0 && (
                 <div id="bestsellers">
-                  <BestsellingSection products={topSelling} />
+                  <LazyBestSellingProducts />
                 </div>
               )}
               
-              <CrazyDeals dealsData={crazyDealsData} />
-              <ToughShoeHero/>
+              <LazyCrazyDeals dealsData={crazyDealsData} />
+              <LazyToughShoeHero/>
               
               {newArrivals.length > 0 && (
                 <div id="new-arrivals">
-                  <NewArrivalsSection products={newArrivals} />
+                  <LazyNewArrivals products={newArrivals} />
                 </div>
               )}
 
+              {/* Add Top Reviews Section */}
+              <ReviewSection />
+
               {featuredVideos && featuredVideos.length > 0 && (
-                <FeaturedVideoSection videos={featuredVideos} />
+                <LazyFeaturedVideoSection videos={featuredVideos} />
               )}
               
               {allProducts.length > 0 && (
-                <AllProductsSection products={allProducts} />
+                <LazyAllProductsSection products={allProducts} />
               )}
             </div>
           </>

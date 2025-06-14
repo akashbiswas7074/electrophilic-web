@@ -2,10 +2,10 @@
 
 import ReactMarkdown from "react-markdown";
 import { useSession } from "next-auth/react";
-import { Heart, Truck, ShieldCheck, RefreshCcw, ArrowRight, CheckCircle2, Package, Info, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Heart, Truck, ShieldCheck, RefreshCcw, ArrowRight, CheckCircle2, Package, Info, AlertCircle, ChevronDown, ChevronUp, Store, Mail, Phone, MapPin, Star } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from "react";
 import ImageThumbnail from "@/components/shared/ImageThumbnail";
 import ThumbnailScroller from "@/components/shared/ThumbnailScroller";
 import {
@@ -26,15 +26,53 @@ import {
   getSingleProduct,
 } from "@/lib/database/actions/product.actions";
 import Link from "next/link";
-import ProductCard from "@/components/shared/ProductCard";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import IdInvalidError from "@/components/shared/IdInvalidError";
 import { useCart } from "@/contexts/CartContext";
+import YouMightAlsoLike from "@/components/shared/YouMightAlsoLike";
+import MoreFromThisCategory from "@/components/shared/MoreFromThisCategory";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import ProductCardGrid from "@/components/shared/ProductCardGrid";
 import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
+import ProductReviewsContainer from "@/components/shared/product/ProductReviewsContainer";
+
+// Lazy load heavy components
+const ProductCard = lazy(() => import("@/components/shared/ProductCard"));
+const ProductCardSmall = lazy(() => import("@/components/shared/product/ProductCardSmall").then(module => ({ default: module.ProductCardSmall })));
+const ProductCardGrid = lazy(() => import("@/components/shared/ProductCardGrid"));
+
+// Loading components for lazy loaded sections
+const ProductCardSkeleton = () => (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <Skeleton className="aspect-square w-full" />
+    <div className="p-4 space-y-2">
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-6 w-1/3" />
+    </div>
+  </div>
+);
+
+const RelatedProductsSkeleton = () => (
+  <div className="bg-gray-50 py-12 mt-6">
+    <div className="w-[90%] mx-auto px-4 sm:px-6">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <Skeleton className="h-6 w-24" />
+      </div>
+      
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <ProductCardSkeleton key={index} />
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 // --- Skeleton Component ---
 const ProductPageSkeleton = () => (
@@ -120,7 +158,7 @@ const ProductPage = () => {
   const ZOOM_FACTOR = 2.5;
   const LENS_SIZE = 120; // Adjusted lens size
 
-  const slug = params.slug as string;
+  const slug = params?.slug as string;
 
   // --- Derived State (moved up for useEffect dependencies) ---
   const p = productData; // Assuming productData is populated before this component section renders meaningfully for zoom
@@ -135,7 +173,7 @@ const ProductPage = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const urlSizeParam = searchParams.get("size");
+      const urlSizeParam = searchParams?.get("size");
       let effectiveInitialSizeIndex = 0; // Default to 0, assuming 0 is a valid default index
       if (urlSizeParam) { // Check if param exists and is not empty
         const parsedIndex = parseInt(urlSizeParam, 10);
@@ -285,7 +323,7 @@ const ProductPage = () => {
     console.log("Size selected:", index);
     setSelectedSizeIndex(index);
     setShowError(false);
-    const currentParams = new URLSearchParams(searchParams.toString());
+    const currentParams = new URLSearchParams(searchParams?.toString() || '');
     currentParams.set("size", index.toString());
     router.replace(`/product/${slug}?${currentParams.toString()}`, { scroll: false });
   };
@@ -690,12 +728,27 @@ const ProductPage = () => {
     year: 'numeric'
   });
 
-  const isNewProduct = p.createdAt && (new Date().getTime() - new Date(p.createdAt).getTime() < 30 * 24 * 60 * 60 * 1000);  return (
+  const isNewProduct = p.createdAt && (new Date().getTime() - new Date(p.createdAt).getTime() < 30 * 24 * 60 * 60 * 1000);
+  
+  return (
     <div className="w-[90%] mx-auto bg-white">
       {isLoading ? <ProductPageSkeleton /> : (
         productData && Object.keys(productData).length > 0 && !fetchError ? (
           <>
             {ModernProductDisplay()}
+            
+            {/* Product Reviews Section */}
+            {productData._id && (
+              <ProductReviewsContainer 
+                productId={productData._id} 
+                productName={productData.name}
+                productImage={productData.subProducts?.[0]?.images?.[0] ? 
+                  (typeof productData.subProducts[0].images[0] === 'string' ? 
+                    productData.subProducts[0].images[0] : 
+                    productData.subProducts[0].images[0]?.url) : 
+                  '/placeholder.png'}
+              />
+            )}
             
             {/* Full Screen Long Description Section */}
             {productData.longDescription && (
@@ -738,9 +791,159 @@ const ProductPage = () => {
               </div>
             )}
             
-            {/* Related Products Section */}
+            {/* Vendor Information Section */}
+            {productData.vendor && (
+              <div className="border-t border-b border-gray-200 py-8 my-8 bg-gray-50">
+                <div className="w-[90%] mx-auto px-4 sm:px-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                      <Store className="h-6 w-6 text-blue-600" />
+                      Sold by
+                    </h2>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Vendor Basic Info */}
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                            {productData.vendor.storeName || productData.vendor.name || 'Vendor Store'}
+                          </h3>
+                          {productData.vendor.description && (
+                            <p className="text-gray-600 text-sm leading-relaxed">
+                              {productData.vendor.description}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Vendor Rating & Reviews (if available) */}
+                        {(productData.vendor.rating || productData.vendor.totalReviews) && (
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-4 h-4 ${
+                                    i < (productData.vendor.rating || 0)
+                                      ? "text-yellow-400 fill-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">
+                              {productData.vendor.rating?.toFixed(1) || 'N/A'}
+                            </span>
+                            {productData.vendor.totalReviews && (
+                              <span className="text-sm text-gray-500">
+                                ({productData.vendor.totalReviews} reviews)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Vendor Contact Info */}
+                      <div className="space-y-3">
+                        <h4 className="font-medium text-gray-900 mb-3">Contact Information</h4>
+                        
+                        {productData.vendor.email && (
+                          <div className="flex items-center gap-3 text-sm">
+                            <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <a 
+                              href={`mailto:${productData.vendor.email}`}
+                              className="text-blue-600 hover:text-blue-800 break-all"
+                            >
+                              {productData.vendor.email}
+                            </a>
+                          </div>
+                        )}
+                        
+                        {productData.vendor.phoneNumber && (
+                          <div className="flex items-center gap-3 text-sm">
+                            <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <span className="text-gray-700 leading-relaxed">
+                              {productData.vendor.phoneNumber}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {productData.vendor.address && (
+                          <div className="flex items-start gap-3 text-sm">
+                            <MapPin className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-gray-700 leading-relaxed">
+                              {productData.vendor.address}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Additional vendor info */}
+                        {productData.vendor.businessType && (
+                          <div className="mt-4 pt-3 border-t border-gray-100">
+                            <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                              {productData.vendor.businessType}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Vendor Actions */}
+                    <div className="mt-6 pt-6 border-t border-gray-100 flex flex-wrap gap-3">
+                      {productData.vendor.website && (
+                        <a
+                          href={productData.vendor.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                          <Store className="h-4 w-4 mr-2" />
+                          Visit Store
+                        </a>
+                      )}
+                      
+                      {productData.vendor._id && (
+                        <Link
+                          href={`/vendor/${productData.vendor._id}`}
+                          className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 transition-colors"
+                        >
+                          View All Products
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* You Might Also Like Section */}
+            <YouMightAlsoLike 
+              productId={productData._id}
+              recommendationType="hybrid"
+              limit={8}
+              title="You Might Also Like"
+              subtitle="Based on your selection"
+              showViewAll={true}
+              viewAllLink="/shop"
+              autoplay={true}
+            />
+            
+            {/* More From This Category Section */}
+            <MoreFromThisCategory
+              categoryId={productData.category?._id}
+              limit={6}
+              title="More from This Category"
+              subtitle={`Explore more products in ${productData.category?.name || 'this category'}`}
+              showViewAll={true}
+              viewAllLink={`/shop?category=${productData.category?._id}`}
+              autoplay={false}
+              className="mt-8"
+            />
+
+            {/* Legacy fallback - keep existing related products as backup */}
             {relatedProductsData && relatedProductsData.length > 0 ? (
-              <div className="bg-gray-50 py-12 mt-6">
+              <div className="bg-gray-50 py-12 mt-6" style={{ display: 'none' }}>
                 <div className="w-[90%] mx-auto px-4 sm:px-6">
                   <div className="flex justify-between items-center mb-8">
                     <div>
@@ -753,11 +956,13 @@ const ProductPage = () => {
                     </Link>
                   </div>
                   
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                    {relatedProductsData.slice(0, 4).map((product: any) => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
-                  </div>
+                  <Suspense fallback={<RelatedProductsSkeleton />}>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+                      {relatedProductsData.slice(0, 5).map((product: any) => (
+                        <ProductCardSmall key={product.id} product={product} />
+                      ))}
+                    </div>
+                  </Suspense>
                 </div>
               </div>
             ) : null}
@@ -848,8 +1053,9 @@ const ProductPage = () => {
                   {currentImages.map((imgSrc: string, index: number) => (
                     <div key={index} className="flex-shrink-0 min-w-[64px]">
                       <ImageThumbnail
+                        key={index}
                         src={imgSrc}
-                        alt={`${p.name} thumbnail ${index + 1}`}
+                        alt={`${p.name} image ${index + 1}`}
                         isSelected={selectedImageIndex === index}
                         onClick={() => setSelectedImageIndex(index)}
                       />
@@ -871,7 +1077,8 @@ const ProductPage = () => {
                     className="object-contain transition-transform duration-300 p-3 md:p-5"
                     onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.png'; }}
                     sizes="(max-width: 768px) 100vw, (max-width: 1024px) 70vw, 600px"
-                    priority
+                    priority={selectedImageIndex === 0} // Only prioritize the first image
+                    loading={selectedImageIndex === 0 ? "eager" : "lazy"} // Lazy load non-primary images
                   />
                   
                   {/* Badges */}
@@ -1148,9 +1355,10 @@ const ProductPage = () => {
               {/* Product Details with Modified Tabs - Removed Long Description Tab */}
               <div className="border-t pt-5 sm:pt-6">
                 <Tabs defaultValue="details" className="w-full">
-                  <TabsList className="grid grid-cols-2 mb-6">
+                  <TabsList className="grid grid-cols-3 mb-6">
                     <TabsTrigger value="details">Details</TabsTrigger>
                     <TabsTrigger value="shipping">Shipping</TabsTrigger>
+                    <TabsTrigger value="vendor">Vendor</TabsTrigger>
                   </TabsList>
                   
                   <TabsContent value="details" className="space-y-4">
@@ -1201,6 +1409,55 @@ const ProductPage = () => {
                         </div>
                       </div>
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="vendor" className="space-y-4">
+                    <h3 className="font-bold text-base sm:text-lg mb-3">Vendor Information</h3>
+                    
+                    {p.vendor ? (
+                      <div className="space-y-4 text-sm text-gray-700">
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Package size={20} className="text-gray-600" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900 mb-1">{p.vendor.name}</h4>
+                              {p.vendor.email && (
+                                <p className="text-gray-600 mb-2">
+                                  <span className="font-medium">Email:</span> {p.vendor.email}
+                                </p>
+                              )}
+                              {p.vendor.phoneNumber && (
+                                <p className="text-gray-600 mb-2">
+                                  <span className="font-medium">Phone:</span> {p.vendor.phoneNumber}
+                                </p>
+                              )}
+                              {p.vendor.address && (
+                                <p className="text-gray-600 mb-2">
+                                  <span className="font-medium">Address:</span> {p.vendor.address}
+                                </p>
+                              )}
+                              {p.vendor.description && (
+                                <div className="mt-3">
+                                  <span className="font-medium text-gray-900">About the vendor:</span>
+                                  <p className="text-gray-600 mt-1">{p.vendor.description}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <ShieldCheck size={14} className="text-green-600" />
+                          <span>Verified vendor partner</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 text-sm">
+                        <p>No vendor information available for this product.</p>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </div>

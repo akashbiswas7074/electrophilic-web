@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/database/connect";
 import Order, { IOrder, IOrderItem } from "@/lib/database/models/order.model";
 import mongoose from "mongoose";
+import Vendor from "@/lib/database/models/vendor.model";
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,10 +22,44 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    // Check if the user is a vendor
+    const vendor = await Vendor.findOne({ userId });
+    const isVendor = !!vendor;
 
-    if (!order) {
-      return NextResponse.json({ success: false, message: "Order not found or access denied" }, { status: 404 });
+    // For vendors, we need to fetch the order differently to check permissions
+    let order;
+    if (isVendor) {
+      // For vendors, we don't filter by user since vendors need to see customer orders
+      order = await Order.findById(orderId).populate({
+        path: 'products.product',
+        select: 'vendorId'
+      });
+      
+      if (!order) {
+        return NextResponse.json({ success: false, message: "Order not found" }, { status: 404 });
+      }
+
+      // Check if this vendor has permission for this order
+      // A vendor can only cancel orders if all products in the order belong to them
+      const vendorId = vendor._id.toString();
+      const allProductsBelongToVendor = order.products.every((product: any) => 
+        product.product && product.product.vendorId && 
+        product.product.vendorId.toString() === vendorId
+      );
+
+      if (!allProductsBelongToVendor) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "You don't have permission to cancel this order. You can only cancel orders containing your products exclusively."
+        }, { status: 403 });
+      }
+    } else {
+      // For regular users, find their own order
+      order = await Order.findOne({ _id: orderId, user: userId });
+      
+      if (!order) {
+        return NextResponse.json({ success: false, message: "Order not found or access denied" }, { status: 404 });
+      }
     }
 
     // Check overall order status (website format)

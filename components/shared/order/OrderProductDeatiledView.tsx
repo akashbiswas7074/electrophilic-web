@@ -6,12 +6,16 @@ import {
   TruckIcon,
   XCircleIcon,
   PackageCheckIcon, // Added for Confirmed status
+  StoreIcon, // Added for vendor information
+  StarIcon, // Added for reviews
 } from "lucide-react";
 import React, { useState } from "react";
 import { FaChevronCircleDown, FaChevronCircleUp } from "react-icons/fa";
 import { toast } from "sonner";
 // Corrected import: Use the client-safe utility
 import { mapAdminStatusToWebsite } from "@/lib/order-status-utils";
+// Import our new review component
+import OrderItemReview from "./OrderItemReview";
 
 type Props = {
   item: any;
@@ -19,7 +23,8 @@ type Props = {
 };
 
 const OrderedProductDetailedView = ({ item, orderId }: Props) => {
-  const [open, setOpen] = useState(false);  const [status, setStatus] = useState(() => {
+  const [open, setOpen] = useState(false);  
+  const [status, setStatus] = useState(() => {
     // Handle both admin and website status formats
     if (item.status) {
       // Check if the status is in admin format and convert if needed
@@ -76,6 +81,25 @@ const OrderedProductDetailedView = ({ item, orderId }: Props) => {
     "completed": "Completed", // Admin's 'Completed'
   };
 
+  // Helper function to convert website status format to match status display names
+  const getEquivalentStatus = (status: string): string => {
+    const mapping: { [key: string]: string } = {
+      "pending": "not processed",
+      "processing": "processing",
+      "confirmed": "confirmed",
+      "shipped": "dispatched",
+      "delivered": "completed",
+      "cancelled": "cancelled",
+      "refunded": "processing", // Maps to processing for refund workflow
+      "completed": "completed",
+    };
+    
+    return mapping[status.toLowerCase()] || status.toLowerCase();
+  };
+
+  // Check if the item can be reviewed (delivered/completed and not already reviewed)
+  const canReview = (status === "delivered" || status === "completed") && !item.reviewed;
+  
   // Modified step index logic to handle cancelled state and website status format
   const currentStepIndex = status === "cancelled" 
     ? steps.findIndex(step => step.name === "Cancelled")
@@ -161,23 +185,44 @@ const OrderedProductDetailedView = ({ item, orderId }: Props) => {
   };
 
   return (
-    <>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          {steps.map((step, i) => (
-            <React.Fragment key={i}>
-              {/* Active step */}
-              {i === currentStepIndex && (
-                <div className="flex items-center">
-                  {step.icon}
-                  <span className="ml-1 text-sm font-medium">
-                    {statusDisplayMap[status] || step.name}
-                  </span>
-                </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>        <div className="flex items-center space-x-3">
+    <div className="relative">
+      <div className="flex justify-between items-center">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center text-sm font-medium text-gray-600 hover:text-gray-900"
+        >
+          {open ? (
+            <>
+              <FaChevronCircleUp className="mr-1 h-4 w-4" />
+              Hide Details
+            </>
+          ) : (
+            <>
+              <FaChevronCircleDown className="mr-1 h-4 w-4" />
+              View Details
+            </>
+          )}
+        </button>
+        
+        <div className="flex space-x-2">
+          {/* Review button for delivered/completed products that haven't been reviewed yet */}
+          {canReview && (
+            <OrderItemReview
+              productId={item.product?._id || item.productId || item._id}
+              productName={item.name}
+              productImage={item.image}
+              orderId={orderId}
+              orderItemId={item._id}
+            />
+          )}
+          
+          {/* "Reviewed" badge if product has been reviewed */}
+          {(status === "delivered" || status === "completed") && item.reviewed && (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <StarIcon className="h-3 w-3 mr-1" /> Reviewed
+            </span>
+          )}
+          
           {/* Cancel button for products that are not yet confirmed or shipped */}
           {status !== "cancelled" && status !== "delivered" && status !== "completed" && status !== "shipped" && status !== "dispatched" && status !== "confirmed" && (
             <Button
@@ -210,18 +255,176 @@ const OrderedProductDetailedView = ({ item, orderId }: Props) => {
               Cancellation Requested
             </span>
           )}
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-4 space-y-4">
+          {/* Status timeline */}
+          <div className="relative">
+            {/* Vertical line */}
+            <div className="absolute top-0 left-3 h-full w-0.5 bg-gray-200"></div>
+            
+            <div className="space-y-6">
+              {steps.map((step, index) => (
+                <div
+                  key={index}
+                  className={`relative flex items-start ${
+                    (step.name === "Cancelled" && status !== "cancelled") ||
+                    (step.name !== "Cancelled" && status === "cancelled" && index > 0)
+                      ? "opacity-30"
+                      : ""
+                  }`}
+                >
+                  <div className="flex-shrink-0 h-6 w-6 z-10">{step.icon}</div>
+                  <div className="ml-4">
+                    <p className="font-medium">{step.name}</p>
+                    {/* Display timestamp if status matches this step */}
+                    {(getEquivalentStatus(status) === step.name.toLowerCase() ||
+                      (status === "cancelled" && step.name === "Cancelled")) && (
+                      <p className="text-sm text-gray-500">
+                        {status === "cancelled"
+                          ? item.cancelledAt
+                            ? new Date(item.cancelledAt).toLocaleString()
+                            : "Processing..."
+                          : step.name === "Completed" && item.deliveredAt
+                          ? new Date(item.deliveredAt).toLocaleString()
+                          : "Processing..."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Vendor Information - Enhanced */}
+          {item.vendor && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+              <div className="flex items-center mb-2">
+                <StoreIcon className="h-5 w-5 text-gray-600 mr-2" />
+                <h5 className="font-medium text-gray-700">Vendor Information</h5>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="bg-white p-2 rounded-md border border-gray-200">
+                  <span className="text-sm text-gray-700 mr-2 font-medium">Name:</span> 
+                  <span className="text-sm font-semibold">
+                    {typeof item.vendor === 'object' 
+                      ? (item.vendor.businessName || item.vendor.name || 'Unknown Vendor')
+                      : (typeof item.vendor === 'string' ? item.vendor : 'Unknown Vendor')}
+                  </span>
+                </div>
+                
+                {typeof item.vendor === 'object' && (
+                  <>
+                    {item.vendor.email && (
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-sm text-gray-700 mr-2 font-medium">Email:</span> 
+                        <span className="text-sm font-semibold">{item.vendor.email}</span>
+                      </div>
+                    )}
+                    
+                    {(item.vendor.phoneNumber || item.vendor.phone) && (
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-sm text-gray-700 mr-2 font-medium">Phone:</span> 
+                        <span className="text-sm font-semibold">{item.vendor.phoneNumber || item.vendor.phone}</span>
+                      </div>
+                    )}
+                    
+                    {item.vendor.address && (
+                      <div className="bg-white p-2 rounded-md border border-gray-200 md:col-span-2">
+                        <span className="text-sm text-gray-700 mr-2 font-medium">Address:</span> 
+                        <span className="text-sm font-semibold">{item.vendor.address}</span>
+                      </div>
+                    )}
+                    
+                    {item.vendor.storeName && (
+                      <div className="bg-white p-2 rounded-md border border-gray-200">
+                        <span className="text-sm text-gray-700 mr-2 font-medium">Store:</span> 
+                        <span className="text-sm font-semibold">{item.vendor.storeName}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           
-          <button
-            onClick={() => setOpen(!open)}
-            className="focus:outline-none"
-          >
-            {open ? (
-              <FaChevronCircleUp className="text-gray-500" />
-            ) : (
-              <FaChevronCircleDown className="text-gray-500" />
-            )}
-          </button>
-        </div>      </div>
+          {/* Always display tracking information if available (except cancelled orders) */}
+          {(item.trackingUrl || item.trackingId) && status !== "cancelled" && (
+            <div className="mt-3 rounded-md bg-blue-50 border border-blue-100 p-3">
+              <div className="flex items-center mb-2">
+                <TruckIcon className="h-5 w-5 text-blue-600 mr-2" />
+                <h5 className="font-medium text-blue-700">Tracking Information</h5>
+              </div>
+              
+              {item.trackingId && (
+                <div className="flex items-center mb-2 bg-white p-2 rounded-md border border-blue-200">
+                  <span className="text-sm text-gray-700 mr-2 font-medium">Tracking ID:</span> 
+                  <span className="text-sm font-semibold">{item.trackingId}</span>
+                </div>
+              )}            {item.trackingUrl && (
+                <div className="mb-1">
+                  <a 
+                    href={item.trackingUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="inline-flex items-center justify-center text-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-3 py-1.5 w-full"
+                  >
+                    <TruckIcon className="h-4 w-4 mr-2" /> Track Your Package
+                  </a>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {item.trackingUrl.length > 50 ? `${item.trackingUrl.substring(0, 50)}...` : item.trackingUrl}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Cancellation reason if cancelled */}
+          {status === "cancelled" && item.cancelReason && (
+            <div className="p-3 rounded-md bg-red-50 border border-red-100">
+              <p className="text-sm text-red-700 font-medium mb-1">Cancellation Reason</p>
+              <p className="text-sm text-gray-700">
+                {item.cancelReason}
+              </p>
+            </div>
+          )}
+          
+          {/* Review information if already reviewed */}
+          {item.reviewed && item.reviewId && (
+            <div className="p-3 rounded-md bg-green-50 border border-green-100">
+              <div className="flex items-center mb-2">
+                <StarIcon className="h-5 w-5 text-green-600 mr-2" />
+                <h5 className="font-medium text-green-700">Your Review</h5>
+              </div>
+              <div className="bg-white p-2 rounded-md border border-green-200">
+                <div className="flex items-center mb-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <StarIcon
+                      key={star}
+                      className={`h-4 w-4 ${
+                        (item.reviewRating || 0) >= star
+                          ? "text-yellow-400 fill-yellow-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-2 text-sm text-gray-600">
+                    {new Date(item.reviewDate).toLocaleDateString()}
+                  </span>
+                </div>
+                {item.reviewComment && (
+                  <p className="text-sm text-gray-700 mt-1">
+                    "{item.reviewComment}"
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       
       {/* Cancellation Request Modal */}
       {showCancelModal && (
@@ -269,74 +472,7 @@ const OrderedProductDetailedView = ({ item, orderId }: Props) => {
           </div>
         </div>
       )}
-      
-      {/* Always display tracking information if available (except cancelled orders) */}
-      {(item.trackingUrl || item.trackingId) && status !== "cancelled" && (
-        <div className="mt-3 rounded-md bg-blue-50 border border-blue-100 p-3">
-          <div className="flex items-center mb-2">
-            <TruckIcon className="h-5 w-5 text-blue-600 mr-2" />
-            <h5 className="font-medium text-blue-700">Tracking Information</h5>
-          </div>
-          
-          {item.trackingId && (
-            <div className="flex items-center mb-2 bg-white p-2 rounded-md border border-blue-200">
-              <span className="text-sm text-gray-700 mr-2 font-medium">Tracking ID:</span> 
-              <span className="text-sm font-semibold">{item.trackingId}</span>
-            </div>
-          )}            {item.trackingUrl && (
-            <div className="mb-1">
-              <a 
-                href={item.trackingUrl} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="inline-flex items-center justify-center text-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-3 py-1.5 w-full"
-              >
-                <TruckIcon className="h-4 w-4 mr-2" /> Track Your Package
-              </a>
-              <p className="text-xs text-gray-500 mt-1">
-                {item.trackingUrl.length > 50 ? `${item.trackingUrl.substring(0, 50)}...` : item.trackingUrl}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {open && (
-        <div className="mt-4 border p-3 rounded-md bg-gray-50">
-          <h4 className="font-medium mb-2">Order Progress Timeline</h4>
-          <div className="space-y-3">
-            {steps.map((step, i) => {
-              // For cancelled orders, only show the cancelled step as active
-              const isActive = status === "cancelled" 
-                ? step.name === "Cancelled"
-                : i <= currentStepIndex;
-              
-              // Skip the cancelled step if the order isn\'t cancelled
-              if (status !== "cancelled" && step.name === "Cancelled") {
-                return null;
-              }
-              // Skip "Completed" step if current status is "delivered" (as "delivered" is the final step for user)
-              // Or more generally, skip steps that are beyond the current active step unless it\'s cancelled
-              // if (status !== "cancelled" && i > currentStepIndex) { // Commented out to show future steps as inactive
-              //    return null; 
-              // }
-              
-              return (
-                <div 
-                  key={i} 
-                  className={`flex items-center space-x-3 ${
-                    isActive ? "text-black" : "text-gray-400"
-                  }`}
-                >
-                  <div className="flex-shrink-0">{step.icon}</div>
-                  <span className="text-sm">{step.name}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 };
 

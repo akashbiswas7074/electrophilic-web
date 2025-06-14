@@ -4,7 +4,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useProductOrderCountsContext } from '@/contexts/ProductOrderCountsContext';
-import { Eye, Heart, Loader2, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { Eye, Heart, Loader2, ShoppingBag, ShoppingCart, Star, Tag } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -14,11 +14,13 @@ interface ProductProps {
   product: {
     id: string;
     name: string;
-    category?: string;
+    category?: string | any; // Handle object category
+    subcategory?: string | any; // Handle object subcategory
     image: string;
     rating?: number;
+    numReviews?: number; // Add numReviews property to match backend data
+    reviews?: number; // Keep reviews for backward compatibility
     slug: string;
-    reviews?: number;
     price: number | string;
     originalPrice?: number | string;
     discount?: number | string;
@@ -31,14 +33,15 @@ interface ProductProps {
     sold?: number;
     stock?: number;
     subProducts?: any[];
-    sizes?: any[] | null; // Add direct sizes property which might be empty
+    sizes?: any[] | null;
     description?: string;
     _id?: string; // MongoDB ID
-    _doc?: any; // Add missing _doc property for MongoDB documents
+    _doc?: any; // MongoDB document property
   };
+  viewMode?: 'grid' | 'list';
 }
 
-export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
+export const ProductCardSmall: React.FC<ProductProps> = ({ product, viewMode = 'grid' }) => {
   const { data: session, status } = useSession();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -55,6 +58,7 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
     return null; // Return nothing if product is undefined
   }
   
+  // Ensure we have a valid product ID by checking all possible sources
   const productId = product.id || product._id || '';
   const isProductInWishlist = productId ? isInWishlist(productId) : false;
   
@@ -67,6 +71,7 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
     discount, 
     originalPrice,
     category = "Product",
+    subcategory,
     isNew,
     isFeatured,
     featured,
@@ -154,6 +159,82 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
   
   const displayName = formatProductName(name);
 
+  // Format category to ensure it's always a string - Enhanced to handle nested objects better
+  const displayCategory = (() => {
+    try {
+      // If category is undefined, return default
+      if (!category) return 'Category';
+      
+      // If category is a string, use it directly
+      if (typeof category === 'string') return category;
+      
+      // If category is an object
+      if (typeof category === 'object' && category !== null) {
+        // First try to get the name property - most common format
+        if (category.name) return category.name;
+        
+        // Try legacy _id property for MongoDB documents
+        if (category._id) {
+          // If subcategory has a string _id, use it
+          if (typeof category._id === 'string') {
+            // Try to look up the category name from product data or just return the ID
+            return category._id;
+          }
+        }
+      }
+      
+      return 'Category';
+    } catch (error) {
+      console.error("Error formatting category:", error);
+      return 'Category';
+    }
+  })();
+  
+  // Format subcategory with enhanced logic similar to category
+  const displaySubcategory = (() => {
+    try {
+      // If subcategory is undefined or null, return empty string
+      if (!subcategory) return '';
+      
+      // If subcategory is a string, use it directly
+      if (typeof subcategory === 'string') return subcategory;
+      
+      // If subcategory is an array, try to extract first item's name
+      if (Array.isArray(subcategory)) {
+        if (subcategory.length === 0) return '';
+        const firstItem = subcategory[0];
+        
+        if (typeof firstItem === 'string') return firstItem;
+        if (typeof firstItem === 'object' && firstItem !== null && firstItem.name) {
+          return firstItem.name;
+        }
+        
+        // Try to get _id as last resort for array items
+        if (typeof firstItem === 'object' && firstItem !== null && firstItem._id) {
+          return typeof firstItem._id === 'string' ? firstItem._id : 'Subcategory';
+        }
+        
+        return 'Subcategory';
+      }
+      
+      // If subcategory is an object
+      if (typeof subcategory === 'object' && subcategory !== null) {
+        // First try to get the name property
+        if (subcategory.name) return subcategory.name;
+        
+        // Try legacy _id property for MongoDB documents
+        if (subcategory._id) {
+          return typeof subcategory._id === 'string' ? subcategory._id : 'Subcategory';
+        }
+      }
+      
+      return '';
+    } catch (error) {
+      console.error("Error formatting subcategory:", error);
+      return '';
+    }
+  })();
+  
   // Enhanced price calculation with better error handling
   const safePrice = (() => {
     try {
@@ -223,6 +304,9 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
     }
   })();
   
+  // Check if there's a discount to show - only if prices are valid and discount is greater than 0
+  const showDiscount = safePrice > 0 && computedDiscount > 0;
+  
   // Calculate final price correctly - if we have original price and discount, use that calculation
   // otherwise fall back to the provided price
   let finalPrice = safePrice;
@@ -244,13 +328,31 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
     ? `₹${displayMrp.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : '';
   
-  // Check if there's a discount to show - only if prices are valid
-  const showDiscount = safePrice > 0 && computedDiscount && computedDiscount > 0;
-  
   // Get sold count or default to "0" for products with no sales yet
   const displaySoldCount = soldCount > 0 
     ? soldCount.toLocaleString()
     : "0";
+
+  // Check if product has reviews to display rating
+  const hasReviews = typeof product.reviews === 'number' && product.reviews > 0;
+  const hasRating = typeof product.rating === 'number' && product.rating > 0;
+  const shouldShowRating = hasReviews || hasRating;
+  
+  // Format the rating for display with one decimal place if available
+  const displayRating = (() => {
+    if (!hasRating) return 0;
+    return typeof product.rating === 'number' 
+      ? Math.round(product.rating * 10) / 10
+      : 0;
+  })();
+  
+  // Format review count for display
+  const displayReviews = (() => {
+    if (!hasReviews) return 0;
+    return typeof product.reviews === 'number'
+      ? product.reviews
+      : 0;
+  })();
 
   // Function to handle wishlist toggle
   const handleWishlistToggle = async (e: React.MouseEvent) => {
@@ -285,14 +387,37 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
   // Determine if product is sold out
   const isSoldOut = typeof stock === 'number' && stock <= 0;
   
+  // Format product ID for display - Show truncated ID with first and last few characters
+  const displayProductId = (() => {
+    try {
+      if (!productId) return '';
+      if (productId.length <= 12) return productId;
+      // Show first 6 and last 4 chars with ellipsis in between
+      return `${productId.substring(0, 6)}...${productId.substring(productId.length - 4)}`;
+    } catch (error) {
+      return '';
+    }
+  })();
+
   return (
     <div 
-      className="group relative block overflow-hidden rounded-lg transition-all duration-300 hover:shadow-xl bg-white border border-gray-200 hover:border-gray-300"
+      className={cn(
+        "group relative overflow-hidden rounded-lg transition-all duration-300 hover:shadow-xl bg-white border border-gray-200 hover:border-gray-300",
+        viewMode === 'list' ? "flex" : "block"
+      )}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <Link href={`/product/${slug}`} className="block text-black no-underline">
-        <div className="relative aspect-square w-full overflow-hidden rounded-t-lg bg-gray-100"> 
+      <Link href={`/product/${slug}`} className={cn(
+        "text-black no-underline",
+        viewMode === 'list' ? "flex w-full" : "block"
+      )}>
+        <div className={cn(
+          "relative overflow-hidden bg-gray-100",
+          viewMode === 'list' 
+            ? "w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0 rounded-l-lg" 
+            : "aspect-square w-full rounded-t-lg"
+        )}> 
           <Image
             src={image || "/images/broken-link.png"}
             alt={name}
@@ -354,7 +479,7 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
           {/* Product badges section in the top-left corner with modern monochrome styling */}
           <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
             {/* Discount Badge with improved visibility */}
-            {showDiscount && (
+            {showDiscount && computedDiscount > 0 && (
               <div className="bg-slate-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md opacity-95 border border-white/30 flex items-center">
                 <span className="mr-0.5 text-white/90">-</span>
                 <span className="text-sm">{computedDiscount}%</span>
@@ -414,24 +539,49 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
           </button>
         </div>
         
-        <div className="p-3"> 
-          {/* Category tag with modern monochrome pill design */}
-          <div className="mb-1">
-            <span className="inline-block text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{category}</span>
+        <div className={cn(
+          "p-3",
+          viewMode === 'list' && "flex-1"
+        )}> 
+          {/* Product ID badge with modern styling */}
+          {displayProductId && (
+            <div className="mb-1 flex items-center">
+              <Tag size={12} className="text-gray-500 mr-1" />
+              <span className="text-xs text-gray-500">ID: {displayProductId}</span>
+            </div>
+          )}
+          
+          {/* Category and subcategory tags with modern monochrome pill design */}
+          <div className="mb-1 flex flex-wrap gap-1">
+            <span className="inline-block text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{displayCategory}</span>
+            {displaySubcategory && (
+              <>
+                <span className="inline-block text-xs text-gray-400">•</span>
+                <span className="inline-block text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{displaySubcategory}</span>
+              </>
+            )}
           </div>
           
           {/* Product name with improved typography */}
-          <h3 className="text-sm md:text-base font-medium text-gray-900 line-clamp-2 h-[2.5rem] mb-1" title={name}>
+          <h3 className={cn(
+            "font-medium text-gray-900 mb-1", 
+            viewMode === 'list' ? "text-lg line-clamp-1" : "text-sm md:text-base line-clamp-2 h-[2.5rem]"
+          )} title={name}>
             {displayName}
           </h3>
           
+          {/* Product description in list view */}
+          {viewMode === 'list' && description && (
+            <p className="text-sm text-gray-600 line-clamp-2 mb-2">{description}</p>
+          )}
+          
           {/* Enhanced Price Display with modern monochrome styling */}
           <div className="mt-1.5 flex items-baseline flex-wrap gap-x-2">
-            {showDiscount ? (
+            {showDiscount && computedDiscount > 0 ? (
               <>
                 <p className="text-base md:text-lg font-semibold text-black">{displayPrice}</p>
                 <p className="text-sm text-gray-500 line-through">{displayOriginalPrice}</p>
-                <p className="text-sm font-medium text-black bg-indigo-100  px-1.5 rounded">{computedDiscount}% off</p>
+                <p className="text-sm font-medium text-black bg-indigo-100 px-1.5 rounded">{computedDiscount}% off</p>
               </>
             ) : (
               <p className="text-base md:text-lg font-semibold text-black">{displayPrice}</p>
@@ -439,7 +589,34 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
           </div>
           
           {/* Bottom info row with rating and sold count */}
-          <div className="mt-2 flex items-center justify-between">
+          <div className={cn(
+            "mt-2 flex items-center",
+            viewMode === 'list' ? "justify-between mt-auto" : "justify-between"
+          )}>
+            {/* Display star rating - only show if product has ratings/reviews */}
+            {shouldShowRating && (
+              <div className="flex items-center gap-1 mr-2">
+                <div className="flex">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      size={14}
+                      className={cn(
+                        "text-gray-300",
+                        displayRating >= star && "text-yellow-400 fill-yellow-400"
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-medium text-gray-700">
+                  {displayRating.toFixed(1)}
+                  {displayReviews > 0 && (
+                    <span className="text-gray-500 ml-1">({displayReviews})</span>
+                  )}
+                </span>
+              </div>
+            )}
+
             {/* Display sold count with modern monochrome styling */}
             <div className="flex items-center text-xs text-gray-600">
               <ShoppingBag className="w-3.5 h-3.5 mr-1 text-gray-700" />
@@ -452,10 +629,28 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product }) => {
                 FREE DELIVERY
               </span>
             )}
+            
+            {/* Add to cart button for list view */}
+            {viewMode === 'list' && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="ml-auto" 
+                disabled={isSoldOut}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toast.success(`${name} added to cart!`);
+                }}
+              >
+                <ShoppingCart size={16} className="mr-2" />
+                Add to Cart
+              </Button>
+            )}
           </div>
           
           {/* MRP label with modern monochrome styling */}
-          {showDiscount && (
+          {showDiscount && computedDiscount > 0 && (
             <p className="text-xs text-gray-500 mt-1.5">MRP: {displayOriginalPrice} (Incl. all taxes)</p>
           )}
         </div>

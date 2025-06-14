@@ -135,12 +135,18 @@ UserSchema.pre<IUser>("save", async function (next) {
   }
 });
 
-// Ensure Google users always have emailVerified set to a Date
+// Ensure Google users always have emailVerified set to a Date and role is maintained
 UserSchema.pre<IUser>("save", function (next) {
   // If this is a Google user and emailVerified is null or undefined, set it to current date
   if (this.provider === 'google' && !this.emailVerified) {
     this.emailVerified = new Date();
     console.log(`[User Model] Auto-verified email for Google user: ${this.email}`);
+  }
+  
+  // Ensure all users have a role
+  if (!this.role) {
+    this.role = 'user';
+    console.log(`[User Model] Setting default role 'user' for: ${this.email}`);
   }
   
   // If the user is trying to add an address and has an incomplete name, fill it in

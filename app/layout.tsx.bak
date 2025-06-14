@@ -1,0 +1,28 @@
+import './globals.css';
+import { Inter } from 'next/font/google';
+import LayoutWrapper from './layout-wrapper';
+import type { Metadata } from 'next';
+
+const inter = Inter({ subsets: ['latin'] });
+
+// Using generateMetadata function instead of exporting metadata directly
+export function generateMetadata(): Metadata {
+  return {
+    title: 'Electrophilic',
+    description: 'Welcome to Electrophilic.in – Where Innovation Begins! Step into the world of electronics with the ultimate destination for makers, tinkerers, and tech enthusiasts.',
+  };
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <LayoutWrapper>{children}</LayoutWrapper>
+      </body>
+    </html>
+  );
+}

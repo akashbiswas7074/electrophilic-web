@@ -1,9 +1,7 @@
-import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 import { NextAuthOptions, User as NextAuthUser } from "next-auth";
 import type { Adapter } from "next-auth/adapters"; 
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import clientPromise, { getDb } from "@/lib/mongodb"; 
 import { connectToDatabase } from "@/lib/database/connect";
 import User, { IUser } from "@/lib/database/models/user.model"; 
 import bcrypt from "bcryptjs";
@@ -46,13 +44,13 @@ interface AdapterUser {
   [key: string]: any; // Allow for other properties
 }
 
-// Custom MongoDB adapter with explicit database name
-const customAdapter = (options = {}): Adapter => {
+// Custom Mongoose adapter that uses our existing models
+const customMongooseAdapter = (): Adapter => {
   return {
-    ...MongoDBAdapter(clientPromise, options),
-    // Override the createUser function to ensure provider field is set correctly
-    async createUser(data: AdapterUser) {
+    async createUser(data: any) {
       console.log("[Auth] Creating user in vibecart database:", data.email);
+      
+      await connectToDatabase();
       
       // Ensure provider field is set when creating users through adapter
       if (!data.provider) {
@@ -70,16 +68,134 @@ const customAdapter = (options = {}): Adapter => {
         console.log(`[Auth] Auto-set emailVerified for Google user: ${data.email}`);
       }
       
-      const db = await getDb();
-      const result = await db.collection('users').insertOne(data);
-      return { ...data, id: result.insertedId.toString() };
+      const user = await User.create({
+        firstName: data.firstName || data.name?.split(' ')[0] || '',
+        lastName: data.lastName || data.name?.split(' ').slice(1).join(' ') || '',
+        email: data.email,
+        image: data.image,
+        username: data.username || data.email?.split('@')[0],
+        provider: data.provider,
+        emailVerified: data.emailVerified,
+        role: data.role || 'user'
+      });
+      
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        emailVerified: user.emailVerified,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        image: user.image
+      };
+    },
+    
+    async getUser(id: string) {
+      await connectToDatabase();
+      const user = await User.findById(id);
+      if (!user) return null;
+      
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        emailVerified: user.emailVerified,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        image: user.image
+      };
+    },
+    
+    async getUserByEmail(email: string) {
+      await connectToDatabase();
+      const user = await User.findOne({ email });
+      if (!user) return null;
+      
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        emailVerified: user.emailVerified,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        image: user.image
+      };
+    },
+    
+    async getUserByAccount({ providerAccountId, provider }) {
+      await connectToDatabase();
+      // For simplicity, we'll find by email since we don't have separate account linking
+      // In a full implementation, you'd have a separate accounts collection
+      const user = await User.findOne({ provider });
+      if (!user) return null;
+      
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        emailVerified: user.emailVerified,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        image: user.image
+      };
+    },
+    
+    async updateUser(user: any) {
+      await connectToDatabase();
+      const updatedUser = await User.findByIdAndUpdate(
+        user.id,
+        {
+          email: user.email,
+          emailVerified: user.emailVerified,
+          image: user.image,
+          firstName: user.name?.split(' ')[0],
+          lastName: user.name?.split(' ').slice(1).join(' ')
+        },
+        { new: true }
+      );
+      
+      if (!updatedUser) throw new Error('User not found');
+      
+      return {
+        id: updatedUser._id.toString(),
+        email: updatedUser.email,
+        emailVerified: updatedUser.emailVerified,
+        name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+        image: updatedUser.image
+      };
+    },
+    
+    async linkAccount(account: any) {
+      // For simplicity, we're not implementing account linking
+      // In a full implementation, you'd store this in a separate accounts collection
+      return account;
+    },
+    
+    async unlinkAccount({ providerAccountId, provider }: { providerAccountId: string; provider: string }) {
+      // For simplicity, we're not implementing account unlinking
+    },
+    
+    async createSession(session: any) {
+      // We're using JWT sessions, so this won't be called
+      return session;
+    },
+    
+    async updateSession(session: any) {
+      // We're using JWT sessions, so this won't be called
+      return session;
+    },
+    
+    async deleteSession(sessionToken: string) {
+      // We're using JWT sessions, so this won't be called
+    },
+    
+    async createVerificationToken(verificationToken: any) {
+      // For email verification - could be implemented if needed
+      return verificationToken;
+    },
+    
+    async useVerificationToken({ identifier, token }: { identifier: string; token: string }) {
+      // For email verification - could be implemented if needed
+      return null;
     }
   };
 };
 
 export const authOptions: NextAuthOptions = {
-  // Use our custom MongoDB adapter
-  adapter: customAdapter(),
+  // Use our custom Mongoose adapter
+  adapter: customMongooseAdapter(),
 
   // Configure one or more authentication providers
   providers: [
@@ -437,11 +553,11 @@ export const authOptions: NextAuthOptions = {
                             isModified = true;
                         }
                         
-                        // Update provider if it wasn't google before
-                        if (dbUser.provider !== 'google') {
+                        // Only update provider if it's not set (null/undefined)
+                        if (!dbUser.provider) {
                             dbUser.provider = 'google';
                             isModified = true;
-                            console.log(`Updated provider for user ${dbUser.email} to google`);
+                            console.log(`Set provider for user ${dbUser.email} to google (was unset)`);
                         }
                         
                         // Ensure email is verified for Google users
@@ -478,8 +594,10 @@ export const authOptions: NextAuthOptions = {
                         token.firstName = dbUser.firstName || googleProfile.given_name || 'Google';
                         token.lastName = dbUser.lastName || googleProfile.family_name || 'User';
                         token.picture = dbUser.image || googleProfile.picture;
+                        // Always ensure the role is preserved from the database
                         token.role = dbUser.role || 'user';
-                        token.provider = 'google';
+                        // Preserve the original provider in the token, don't force it to 'google'
+                        token.provider = dbUser.provider || 'google';
                         token.email = dbUser.email || email;
                     }
                 } catch (error) {
@@ -569,42 +687,53 @@ export const authOptions: NextAuthOptions = {
             let existingUser = await User.findOne({ email });
             
             if (existingUser) {
-              console.log(`Google login: User ${email} already exists in DB`);
+              console.log(`Google login: User ${email} already exists in DB with provider: ${existingUser.provider}`);
               
-              // Update provider regardless of current value to ensure consistency
-              // This fixes issues where Google users may not have provider set
-              if (existingUser.provider !== 'google') {
-                console.log(`Updating user ${email} provider from ${existingUser.provider} to google`);
+              // Instead of changing provider, allow login with Google for any user with this email
+              // Just update Google-specific profile data without changing the provider
+              let isModified = false;
+              
+              // Update profile picture if it's from Google and different
+              if (googleProfile.picture && existingUser.image !== googleProfile.picture) {
+                existingUser.image = googleProfile.picture;
+                isModified = true;
+              }
+              
+              // Update name details if available from Google
+              if (googleProfile.given_name && (!existingUser.firstName || existingUser.firstName !== googleProfile.given_name)) {
+                existingUser.firstName = googleProfile.given_name;
+                isModified = true;
+              }
+              
+              if (googleProfile.family_name && (!existingUser.lastName || existingUser.lastName !== googleProfile.family_name)) {
+                existingUser.lastName = googleProfile.family_name;
+                isModified = true;
+              }
+              
+              // Ensure email is verified regardless of provider
+              if (!existingUser.emailVerified) {
+                existingUser.emailVerified = new Date();
+                isModified = true;
+              }
+              
+              // Ensure role is set but don't overwrite existing role
+              if (!existingUser.role) {
+                existingUser.role = 'user';
+                isModified = true;
+              }
+              
+              // Save if anything changed
+              if (isModified) {
                 try {
-                  existingUser.provider = 'google';
-                  
-                  // Also update profile data if needed
-                  if (googleProfile.picture && existingUser.image !== googleProfile.picture) {
-                    existingUser.image = googleProfile.picture;
-                  }
-                  
-                  if (googleProfile.given_name && (!existingUser.firstName || existingUser.firstName !== googleProfile.given_name)) {
-                    existingUser.firstName = googleProfile.given_name;
-                  }
-                  
-                  if (googleProfile.family_name && (!existingUser.lastName || existingUser.lastName !== googleProfile.family_name)) {
-                    existingUser.lastName = googleProfile.family_name;
-                  }
-                  
-                  // Ensure email is verified for Google users
-                  if (!existingUser.emailVerified) {
-                    existingUser.emailVerified = new Date();
-                  }
-                  
                   await existingUser.save();
-                  console.log(`Successfully updated Google user data for ${email}`);
+                  console.log(`Successfully updated user data for ${email} via Google login`);
                 } catch (updateError) {
-                  console.error(`Failed to update user ${email} provider to google:`, updateError);
+                  console.error(`Failed to update user ${email} data:`, updateError);
                   // Continue with sign-in despite the error
                 }
               }
             } else {
-              // New user will be created - explicitly set provider here to ensure it's saved
+              // New user will be created with Google provider
               console.log(`Google login: New user ${email} will be created with provider 'google'`);
               // Provider is set in the profile method but we log it here for clarity
             }

@@ -136,3 +136,81 @@ export const getUniqueSubCategoryNames = unstable_cache(
     revalidate: 3600, // Revalidate every hour
   }
 );
+
+// Get subcategory by ID
+export const getSubCategoryById = unstable_cache(
+  async (id: string) => {
+    try {
+      await connectToDatabase();
+      
+      const subCategory = await SubCategory.findById(id)
+        .populate('parent')
+        .lean();
+      
+      if (!subCategory) {
+        return {
+          message: "Subcategory not found",
+          subCategory: null,
+          success: false,
+        };
+      }
+      
+      return {
+        message: "Successfully fetched subcategory by ID",
+        subCategory: JSON.parse(JSON.stringify(subCategory)),
+        success: true,
+      };
+    } catch (error) {
+      console.error("Error fetching subcategory by ID:", error);
+      handleError(error);
+      return {
+        message: "An error occurred while fetching subcategory",
+        subCategory: null,
+        success: false,
+      };
+    }
+  },
+  ["subcategory_by_id"],
+  {
+    revalidate: 3600, // Revalidate every hour
+  }
+);
+
+// Get subcategory by slug
+export const getSubCategoryBySlug = unstable_cache(
+  async (slug: string) => {
+    try {
+      await connectToDatabase();
+      
+      const subCategory = await SubCategory.findOne({ slug })
+        .populate('parent')
+        .lean();
+      
+      if (!subCategory) {
+        return {
+          message: "Subcategory not found",
+          subCategory: null,
+          success: false,
+        };
+      }
+      
+      return {
+        message: "Successfully fetched subcategory by slug",
+        subCategory: JSON.parse(JSON.stringify(subCategory)),
+        success: true,
+      };
+    } catch (error) {
+      console.error("Error fetching subcategory by slug:", error);
+      handleError(error);
+      return {
+        message: "An error occurred while fetching subcategory",
+        subCategory: null,
+        success: false,
+      };
+    }
+  },
+  ["subcategory_by_slug"],
+  {
+    revalidate: 3600, // Revalidate every hour
+  }
+);

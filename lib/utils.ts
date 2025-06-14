@@ -364,3 +364,67 @@ export const extractCategoryImage = (category: any, defaultImage: string = "/ima
     return defaultImage;
   }
 };
+
+/**
+ * Safely serializes MongoDB objects for client components
+ * This converts Buffer _id objects to strings and handles nested objects/arrays
+ */
+export function safeSerialize<T>(obj: T): T {
+  if (!obj) return obj;
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Ensures consistent data serialization for client components
+ * @param data Any data that needs to be passed to client components
+ * @param defaultValue Optional default value if data is undefined
+ */
+export function ensureClientData<T>(data: T, defaultValue?: T): T {
+  // Handle undefined or null input gracefully
+  if (data === undefined || data === null) {
+    return (defaultValue !== undefined) ? defaultValue : null as unknown as T;
+  }
+  
+  // Ensure data is serialized properly
+  try {
+    return JSON.parse(JSON.stringify(data));
+  } catch (error) {
+    console.error("Error during data serialization:", error);
+    return (defaultValue !== undefined) ? defaultValue : null as unknown as T;
+  }
+}
+
+/**
+ * Creates a properly formatted URL for filtering products by brand
+ * @param brandId - The ID of the brand to filter by
+ * @param brandName - Optional brand name for debugging
+ * @returns A string URL to the shop page with brand filter applied
+ */
+export const createBrandFilterLink = (brandId: string, brandName?: string): string => {
+  if (!brandId) {
+    console.warn("createBrandFilterLink called without a brandId");
+    return "/shop";
+  }
+  
+  try {
+    // Create URL with brand parameter
+    return `/shop?brand=${encodeURIComponent(brandId)}`;
+  } catch (error) {
+    console.error(`Error creating brand filter link for brand ${brandName || brandId}:`, error);
+    return "/shop";
+  }
+};
+
+// Various utility functions used throughout the application
+
+// Format price for display with currency symbol
+export function formatPrice(price: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(price);
+}
+
+// Other utility functions can be added below...

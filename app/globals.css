@@ -2,55 +2,196 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles for product thumbnails */
-.thumbnail-scroll-container {
-  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-  scroll-behavior: smooth;
-  scrollbar-width: thin;
+/* Enhanced shimmer animation for skeleton loading effects */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-.thumbnail-scroll-container::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+/* Add fade-in animation for lazy loaded content */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.thumbnail-scroll-container::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
+/* Enhanced slide-in animation for mobile menus */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
-.thumbnail-scroll-container.mobile-scroll-active {
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Add slide-in animation specifically for filter drawer */
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Skeleton loading with shimmer effect */
+.animate-shimmer {
   position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
 
-.thumbnail-scroll-container.show-right-indicator::after {
+.animate-shimmer::before {
   content: '';
   position: absolute;
-  right: 0;
   top: 0;
-  bottom: 0;
-  width: 24px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%);
-  pointer-events: none;
-  z-index: 1;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
 }
 
-.thumbnail-scroll-container.show-left-indicator::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 24px;
-  background: linear-gradient(270deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 80%);
-  pointer-events: none;
-  z-index: 1;
+/* Fade-in animation for lazy loaded content */
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
 }
 
-@media (min-width: 640px) {
-  .thumbnail-scroll-container.show-right-indicator::after,
-  .thumbnail-scroll-container.show-left-indicator::before {
-    display: none;
+/* Slide animations for navigation */
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.3s ease-out forwards;
+}
+
+/* Slide animation for filter drawer */
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* Staggered loading animation for product cards and lists */
+.staggered-load > * {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.staggered-load > *:nth-child(1) { animation-delay: 0.05s; }
+.staggered-load > *:nth-child(2) { animation-delay: 0.1s; }
+.staggered-load > *:nth-child(3) { animation-delay: 0.15s; }
+.staggered-load > *:nth-child(4) { animation-delay: 0.2s; }
+.staggered-load > *:nth-child(5) { animation-delay: 0.25s; }
+.staggered-load > *:nth-child(6) { animation-delay: 0.3s; }
+.staggered-load > *:nth-child(7) { animation-delay: 0.35s; }
+.staggered-load > *:nth-child(8) { animation-delay: 0.4s; }
+.staggered-load > *:nth-child(9) { animation-delay: 0.45s; }
+.staggered-load > *:nth-child(10) { animation-delay: 0.5s; }
+
+/* Performance optimizations */
+.lazy-loading-container {
+  contain: layout style paint;
+  will-change: transform, opacity;
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer,
+  .animate-fade-in,
+  .animate-slide-in-right,
+  .animate-slide-in-up,
+  .staggered-load > * {
+    animation: none;
+  }
+  
+  .animate-fade-in {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Loading state improvements */
+.skeleton-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Intersection observer loading states */
+.lazy-load-trigger {
+  min-height: 1px;
+  visibility: hidden;
+}
+
+/* Smooth transitions for lazy loaded images */
+.lazy-image {
+  transition: opacity 0.3s ease-in-out;
+}
+
+.lazy-image.loading {
+  opacity: 0;
+}
+
+.lazy-image.loaded {
+  opacity: 1;
+}
+
+/* Navigation optimizations */
+.navbar-container {
+  contain: layout style;
+  transform: translateZ(0); /* Force hardware acceleration */
+}
+
+.footer-container {
+  contain: layout style;
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 768px) {
+  .mobile-optimized {
+    contain: layout style paint;
+  }
+  
+  .mobile-nav-item {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -280,4 +421,41 @@
 
 .text-dark {
   color: #2B2B2B;
+}
+
+/* Mobile filter drawer styles - improved version */
+.mobile-filter-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-filter-drawer {
+  width: 85%;
+  max-width: 350px;
+  height: 100vh;
+  background: white;
+  overflow-y: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 101;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+  transform: translateX(0);
+  transition: transform 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }

@@ -34,8 +34,12 @@ export async function GET(req: NextRequest, context: any) {
     }
 
     const order = await Order.findOne(query)
-      .populate('orderItems.product', 'name images price')
-      .populate('user', 'name email'); // Populate product details
+      .populate('orderItems.product', 'name images price vendor')
+      .populate({
+        path: 'orderItems.vendor',
+        select: 'name email phone storeName storeDescription logo'
+      })
+      .populate('user', 'name email'); // Populate product details and vendor information
 
     if (!order) {
       return NextResponse.json({ message: 'Order not found or access denied' }, { status: 404 });

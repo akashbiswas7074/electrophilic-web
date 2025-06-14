@@ -4,7 +4,7 @@ const webpack = require('webpack');
 
 const nextConfig = {
   images: {
-    domains: ['res.cloudinary.com'],
+    domains: ['res.cloudinary.com', 'via.placeholder.com', 'placehold.co', 'lh3.googleusercontent.com'],
     // ...existing code...
   },
   webpack: (config, { isServer }) => {
@@ -39,6 +39,14 @@ const nextConfig = {
           process: 'process/browser',
         }),
       );
+      
+      // Use webpack ignores to handle MongoDB client-side encryption
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /mongodb\/lib\/client-side-encryption/,
+          path.resolve(__dirname, './lib/utils/mongo-empty-module.js')
+        )
+      );
     }
 
     // Better handling for node-gyp-build
@@ -49,6 +57,7 @@ const nextConfig = {
     
     return config;
   },
+  transpilePackages: ['mongodb'],
 };
 
 module.exports = nextConfig;

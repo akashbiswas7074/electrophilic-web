@@ -1,19 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Menu, ShoppingCart, User, X, Heart, Search } from "lucide-react"; 
+import { Menu, ShoppingCart, User, X, Heart, Search } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { useWishlist } from "@/contexts/WishlistContext";
-import CartDrawer from "./CartDrawer";
 import Image from "next/image";
-import TopBarComponent from "../TopBar";
-import NavbarInput from "./NavbarInput";
-import MobileSpecificHeader from "./MobileSpecificHeader";
-import BottomNavigationBar from "./BottomNavigationBar";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -28,52 +23,88 @@ import { useWebsiteLogo } from "@/hooks/use-website-logo";
 import { useSiteConfig } from "@/hooks/use-site-config";
 import { useNavbarLinks } from "@/hooks/use-navbar-links";
 
+// Lazy load heavy components that aren't critical for initial render
+const CartDrawer = lazy(() => import("./CartDrawer"));
+const TopBarComponent = lazy(() => import("../TopBar"));
+const NavbarInput = lazy(() => import("./NavbarInput"));
+const MobileSpecificHeader = lazy(() => import("./MobileSpecificHeader"));
+const BottomNavigationBar = lazy(() => import("./BottomNavigationBar"));
+const SearchModal = lazy(() => import("./SearchModal"));
+
+// Loading skeletons for lazy components
+const CartDrawerSkeleton = () => (
+  <div className="fixed inset-0 z-50 bg-black/50 opacity-0 pointer-events-none" />
+);
+
+const TopBarSkeleton = () => (
+  <div className="bg-gray-100 h-8 animate-pulse">
+    <div className="container mx-auto px-4 h-full flex items-center justify-center">
+      <div className="h-3 w-48 bg-gray-200 rounded"></div>
+    </div>
+  </div>
+);
+
+const NavbarInputSkeleton = () => (
+  <div className="w-full max-w-xl h-10 bg-gray-200 rounded-full animate-pulse"></div>
+);
+
+const BottomNavSkeleton = () => (
+  <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 lg:hidden animate-pulse">
+    <div className="flex items-center justify-around h-full px-2">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="flex flex-col items-center justify-center flex-1 py-2">
+          <div className="h-6 w-6 bg-gray-200 rounded mb-1"></div>
+          <div className="h-3 w-8 bg-gray-200 rounded"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const Navbar = () => {
   const { data: session, status } = useSession();
   const { removeItem, updateItemQuantity, isCartDrawerOpen, setCartDrawerOpen } = useCart();
   const { wishlist, isLoading: isWishlistLoading } = useWishlist();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [show, setShow] = useState("translate-y-0"); // State for scroll effect
-  const [lastScrollY, setLastScrollY] = useState(0); // State for scroll direction
+  const [show, setShow] = useState("translate-y-0");
+  const [lastScrollY, setLastScrollY] = useState(0);
   const cartItems = useCartStore((state: any) => state.cart?.cartItems || []);
   const [isMobile, setIsMobile] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [openSearchModal, setOpenSearchModal] = useState(false);
   const { logo, isLoading: isLogoLoading } = useWebsiteLogo();
   const siteConfig = useSiteConfig();
-  const { links: navbarLinks, loading: navLinksLoading } = useNavbarLinks(); // Get navbar links from hook
+  const { links: navbarLinks, loading: navLinksLoading } = useNavbarLinks();
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768); // md breakpoint
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Handle scroll effect for hide/show
   useEffect(() => {
     const controlNavbar = () => {
-      if (window.scrollY > 200) { // Start effect after scrolling down 200px
+      if (window.scrollY > 200) {
         if (window.scrollY > lastScrollY && !isMobileMenuOpen) {
-          setShow("-translate-y-full"); // Hide navbar
+          setShow("-translate-y-full");
         } else {
-          setShow("shadow-md"); // Show navbar with shadow
+          setShow("shadow-md");
         }
       } else {
-        setShow("translate-y-0"); // Keep navbar visible at the top
+        setShow("translate-y-0");
       }
       setLastScrollY(window.scrollY);
     };
     
     window.addEventListener('scroll', controlNavbar);
     return () => window.removeEventListener('scroll', controlNavbar);
-  }, [lastScrollY, isMobileMenuOpen]); // Only track these dependencies
+  }, [lastScrollY, isMobileMenuOpen]);
 
-  // Toggle search visibility on mobile
   const toggleSearch = () => {
-    setIsSearchVisible(!isSearchVisible);
+    setOpenSearchModal(true);
   };
 
-  // Use dynamic navbar links if available, otherwise use default fallback links
   const navItems = navbarLinks.length > 0 
     ? navbarLinks 
     : [
@@ -84,7 +115,6 @@ const Navbar = () => {
         { label: "ORDERS", href: "/orders" },
       ];
 
-  // Determine which logo to use - from database or fallback to site config
   const logoUrl = logo?.logoUrl || siteConfig.logo.imagePath;
   const altText = logo?.altText || siteConfig.name;
   const logoText = logo?.name || siteConfig.logo.text;
@@ -94,7 +124,10 @@ const Navbar = () => {
   return (
     <>
       <div className={`fixed top-0 left-0 right-0 z-[100] transition-transform duration-300 ${show}`}> 
-        <TopBarComponent /> 
+        <Suspense fallback={<TopBarSkeleton />}>
+          <TopBarComponent /> 
+        </Suspense>
+        
         <nav className="w-full transition-all duration-300 ease-in-out bg-white border-b border-gray-200 shadow-sm">
           <div className="px-3 lg:px-6 mx-auto">
             <div className="flex items-center justify-between h-16">
@@ -131,15 +164,19 @@ const Navbar = () => {
                   </Link>
                 ))}
               </div>
-              
+
               {/* Desktop Search Input */}
               <div className="hidden lg:flex flex-1 justify-center px-4">
-                <NavbarInput responsive={false} />
+                <Suspense fallback={<NavbarInputSkeleton />}>
+                  <NavbarInput responsive={false} />
+                </Suspense>
               </div>
 
               {/* Mobile Search (toggle) */}
               <div className={`${isSearchVisible ? 'flex absolute top-16 left-0 right-0 z-20 px-4 py-3 bg-white shadow-lg' : 'hidden'} md:hidden`}>
-                <NavbarInput responsive={true} />
+                <Suspense fallback={<NavbarInputSkeleton />}>
+                  <NavbarInput responsive={true} />
+                </Suspense>
               </div>
 
               {/* Right section */}
@@ -234,7 +271,7 @@ const Navbar = () => {
                 )}
 
                 {/* Mobile menu button */}
-                {/* <Button
+                <Button
                   variant="ghost"
                   size="icon"
                   className="md:hidden hover:bg-black/5 rounded-full transition-all duration-300
@@ -242,15 +279,15 @@ const Navbar = () => {
                   onClick={() => setIsMobileMenuOpen(true)}
                 >
                   <Menu className="h-6 w-6" />
-                </Button> */}
+                </Button>
               </div>
             </div>
           </div>
         </nav>
 
-        {/* Mobile menu */}
+        {/* Mobile menu - keeping existing implementation but with lazy loaded search */}
         <div className={`
-          fixed inset-0 z-[110] bg-black/60 
+          fixed inset-0 z-[110] 
           transition-opacity duration-300
           ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}
         `}>
@@ -275,7 +312,9 @@ const Navbar = () => {
 
             {/* Mobile search inside menu */}
             <div className="px-6 py-4 border-b border-gray-200">
-              <NavbarInput responsive={true} />
+              <Suspense fallback={<NavbarInputSkeleton />}>
+                <NavbarInput responsive={true} />
+              </Suspense>
             </div>
 
             <div className="overflow-y-auto flex-1 py-6">
@@ -367,24 +406,35 @@ const Navbar = () => {
         </div>
 
         {/* Cart Drawer */}
-        <CartDrawer
-          isOpen={isCartDrawerOpen}
-          onClose={() => {
-            setCartDrawerOpen(false); 
-            try {
-              const storeState = useCartStore.getState();
-              if (storeState && typeof storeState.setCartDrawerOpen === 'function') {
-                storeState.setCartDrawerOpen(false);
+        <Suspense fallback={<CartDrawerSkeleton />}>
+          <CartDrawer
+            isOpen={isCartDrawerOpen}
+            onClose={() => {
+              setCartDrawerOpen(false); 
+              try {
+                const storeState = useCartStore.getState();
+                if (storeState && typeof storeState.setCartDrawerOpen === 'function') {
+                  storeState.setCartDrawerOpen(false);
+                }
+              } catch (error) {
+                // handle error
               }
-            } catch (error) {
-              // handle error
-            }
-          }}
-        />
+            }}
+          />
+        </Suspense>
+
+        {/* Search Modal */}
+        {openSearchModal && (
+          <Suspense fallback={null}>
+            <SearchModal setOpen={setOpenSearchModal} />
+          </Suspense>
+        )}
       </div>
 
       {/* Bottom Navigation Bar (only on mobile) */}
-      <BottomNavigationBar />
+      <Suspense fallback={<BottomNavSkeleton />}>
+        <BottomNavigationBar />
+      </Suspense>
     </>
   );
 };

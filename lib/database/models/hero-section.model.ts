@@ -15,6 +15,7 @@ export interface IHeroSection {
   _id?: string;
   title: string;           // The main heading "STRENGTH TAKES SWEAT"
   subtitle: string;        // The text below "The training styles that aren't afraid to put in the work."
+  longDescription?: string; // Rich text description for dynamic HTML content
   buttons: IButton[];      // Array of buttons with label and link
   isActive: boolean;       // Whether this section is currently active
   order: number;           // Display order on the page
@@ -24,6 +25,8 @@ export interface IHeroSection {
   contentAlignment?: 'left' | 'center' | 'right'; // Where to align the content
   mediaUrl?: string;       // URL for media (image or video)
   mediaType?: 'image' | 'video'; // Type of media
+  richContent?: string;    // Rich HTML content for dynamic sections
+  customCss?: string;      // Custom CSS for styling
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -40,6 +43,10 @@ const heroSectionSchema = new mongoose.Schema<IHeroSection>(
       type: String,
       required: [true, "Subtitle is required"],
       trim: true,
+    },
+    longDescription: {
+      type: String,
+      default: '',
     },
     buttons: [
       {
@@ -95,6 +102,14 @@ const heroSectionSchema = new mongoose.Schema<IHeroSection>(
       enum: ["image", "video"],
       default: "image",
       required: true,
+    },
+    richContent: {
+      type: String,
+      default: '',
+    },
+    customCss: {
+      type: String,
+      default: '',
     },
   },
   { timestamps: true }

@@ -4,22 +4,22 @@
  */
 
 export const siteConfig = {
-  name: "POUL & CO", // Default company name
+  name: "", // Blank company name
   logo: {
-    text: "POUL & CO", // Text to use as logo
+    text: "", // Blank text logo
     showText: true, // Whether to show text or only image
-    imagePath: "/images/logo.png", // Path to logo image (if using)
+    imagePath: "https://via.placeholder.com/150x50/000000/FFFFFF?text=Logo", // Placeholder logo image
     useImage: false, // Whether to use image logo
   },
   contact: {
-    email: "contact@poulandco.com",
-    phone: "+1 (123) 456-7890",
-    address: "123 Fashion Street, New York, NY 10001", // Added missing address property
+    email: "",
+    phone: "",
+    address: "", // Blank address
   },
   social: {
-    instagram: "https://instagram.com/poulandco",
-    facebook: "https://facebook.com/poulandco",
-    twitter: "https://twitter.com/poulandco",
+    instagram: "",
+    facebook: "",
+    twitter: "",
   },
   // Add other site-wide configurations as needed
 };

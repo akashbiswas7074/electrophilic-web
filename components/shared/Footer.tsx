@@ -1,5 +1,6 @@
 'use client';
 
+import { lazy, Suspense } from "react";
 import { Facebook, Instagram, Youtube, AtSign, Twitter, Linkedin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,86 @@ import { useSiteConfig } from "@/hooks/use-site-config";
 import { useWebsiteFooter } from "@/hooks/use-website-footer";
 import Link from "next/link";
 import Image from "next/image";
+
+// Inline newsletter subscription component (fallback if external component doesn't exist)
+const NewsletterSubscription = () => (
+  <div className="space-y-4">
+    <h3 className="text-lg font-semibold text-gray-900">SUBSCRIBE</h3>
+    <p className="text-sm text-gray-600">
+      Be the first to get the latest news about trends, promotions, new
+      arrivals, discounts and more!
+    </p>
+    <div className="flex">
+      <Input
+        type="email"
+        placeholder="Email Address"
+        className="rounded-r-none border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+      />
+      <Button
+        type="submit"
+        className="rounded-l-none bg-indigo-600 hover:bg-indigo-700 text-white"
+      >
+        JOIN
+      </Button>
+    </div>
+    <p className="text-sm font-semibold text-gray-700">Secure Payments</p>
+  </div>
+);
+
+// Loading skeleton for newsletter subscription
+const NewsletterSkeleton = () => (
+  <div className="space-y-4 animate-pulse">
+    <div className="h-6 w-24 bg-gray-200 rounded"></div>
+    <div className="space-y-2">
+      <div className="h-4 w-full bg-gray-200 rounded"></div>
+      <div className="h-4 w-3/4 bg-gray-200 rounded"></div>
+    </div>
+    <div className="flex">
+      <div className="flex-1 h-10 bg-gray-200 rounded-l"></div>
+      <div className="w-16 h-10 bg-gray-200 rounded-r"></div>
+    </div>
+    <div className="h-4 w-32 bg-gray-200 rounded"></div>
+  </div>
+);
+
+// Social media links component with lazy loading
+const SocialMediaLinks = ({ socialLinks }: { socialLinks: any }) => (
+  <div className="flex space-x-4">
+    {socialLinks.facebook && (
+      <a href={socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
+        <Facebook size={20} />
+      </a>
+    )}
+    {socialLinks.instagram && (
+      <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
+        <Instagram size={20} />
+      </a>
+    )}
+    {socialLinks.youtube && (
+      <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
+        <Youtube size={20} />
+      </a>
+    )}
+    {socialLinks.twitter && (
+      <a href={socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
+        <Twitter size={20} />
+      </a>
+    )}
+    {socialLinks.linkedin && (
+      <a href={socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
+        <Linkedin size={20} />
+      </a>
+    )}
+  </div>
+);
+
+const SocialMediaSkeleton = () => (
+  <div className="flex space-x-4 animate-pulse">
+    {[...Array(4)].map((_, i) => (
+      <div key={i} className="h-5 w-5 bg-gray-200 rounded"></div>
+    ))}
+  </div>
+);
 
 export default function Footer() {
   const { logo } = useWebsiteLogo();
@@ -59,7 +140,7 @@ export default function Footer() {
   const copyrightText = footer?.copyrightText || `© ${new Date().getFullYear()} ${siteConfig.name}`;
 
   return (
-    <footer className="bg-gray-50 text-gray-800 py-12 px-4 md:px-6 lg:px-8 border-t border-gray-200">
+    <footer className="bg-gray-50 text-gray-800 py-12 px-4 md:px-6 lg:px-8 border-t border-gray-200 footer-container">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
         <div className="space-y-4">
           {showLogoImage ? (
@@ -68,7 +149,8 @@ export default function Footer() {
                 src={logoUrl} 
                 alt={altText}
                 fill
-                className="object-contain"
+                className="object-contain lazy-image"
+                loading="lazy"
               />
             </div>
           ) : (
@@ -80,33 +162,11 @@ export default function Footer() {
           </p>
           <p className="text-sm text-gray-600">{contactEmail}</p>
           <p className="text-sm text-gray-600">{contactPhone}</p>
-          <div className="flex space-x-4">
-            {socialLinks.facebook && (
-              <a href={socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
-                <Facebook size={20} />
-              </a>
-            )}
-            {socialLinks.instagram && (
-              <a href={socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
-                <Instagram size={20} />
-              </a>
-            )}
-            {socialLinks.youtube && (
-              <a href={socialLinks.youtube} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
-                <Youtube size={20} />
-              </a>
-            )}
-            {socialLinks.twitter && (
-              <a href={socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
-                <Twitter size={20} />
-              </a>
-            )}
-            {socialLinks.linkedin && (
-              <a href={socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-gray-700 hover:text-indigo-600 transition-colors">
-                <Linkedin size={20} />
-              </a>
-            )}
-          </div>
+          
+          {/* Lazy loaded social media links */}
+          <Suspense fallback={<SocialMediaSkeleton />}>
+            <SocialMediaLinks socialLinks={socialLinks} />
+          </Suspense>
         </div>
 
         <div>
@@ -142,27 +202,10 @@ export default function Footer() {
           </ul>
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900">SUBSCRIBE</h3>
-          <p className="text-sm text-gray-600">
-            Be the first to get the latest news about trends, promotions, new
-            arrivals, discounts and more!
-          </p>
-          <div className="flex">
-            <Input
-              type="email"
-              placeholder="Email Address"
-              className="rounded-r-none border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
-            />
-            <Button
-              type="submit"
-              className="rounded-l-none bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              JOIN
-            </Button>
-          </div>
-          <p className="text-sm font-semibold text-gray-700">Secure Payments</p>
-        </div>
+        {/* Newsletter subscription */}
+        <Suspense fallback={<NewsletterSkeleton />}>
+          <NewsletterSubscription />
+        </Suspense>
       </div>
 
       <div className="mt-12 pt-8 border-t border-gray-300 flex flex-col md:flex-row justify-between items-center text-sm text-gray-600">

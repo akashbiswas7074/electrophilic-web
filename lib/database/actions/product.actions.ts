@@ -21,13 +21,63 @@ const getFirstSubProductInfo = (product: any): { image: string; discount: number
 
 // Enhanced helper function to extract comprehensive product info including featured status
 const getEnhancedProductInfo = (product: any) => {
-  const firstSubProduct = product.subProducts?.[0];
+  console.log(`[getEnhancedProductInfo] Processing product: ${product.name || 'unnamed'}`);
+  
+  let primaryImage = '/placeholder.png';
+  let discount = 0;
+  let price = 0;
+  let originalPrice = 0;
+  
+  // Extract information from subProducts
+  if (product.subProducts && Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+    const firstSubProduct = product.subProducts[0];
+    
+    if (firstSubProduct) {
+      // Extract image with better error handling
+      if (firstSubProduct.images && Array.isArray(firstSubProduct.images) && firstSubProduct.images.length > 0) {
+        const firstImage = firstSubProduct.images[0];
+        if (typeof firstImage === 'string') {
+          primaryImage = firstImage;
+        } else if (firstImage && typeof firstImage === 'object' && firstImage.url) {
+          primaryImage = firstImage.url;
+        }
+      }
+      
+      // Extract discount
+      discount = firstSubProduct.discount || 0;
+      
+      // Extract price with size consideration
+      if (firstSubProduct.sizes && Array.isArray(firstSubProduct.sizes) && firstSubProduct.sizes.length > 0) {
+        const firstSize = firstSubProduct.sizes[0];
+        originalPrice = firstSize.originalPrice || firstSize.price || 0;
+      } else {
+        originalPrice = firstSubProduct.originalPrice || firstSubProduct.price || 0;
+      }
+      
+      // Calculate final price
+      price = discount > 0 
+        ? originalPrice - (originalPrice * discount / 100)
+        : originalPrice;
+    }
+  } else {
+    // Fallback for products without subProducts
+    if (product.image) {
+      primaryImage = typeof product.image === 'string' ? product.image : (product.image?.url || '/placeholder.png');
+    }
+    originalPrice = product.originalPrice || product.price || 0;
+    price = originalPrice;
+  }
+  
+  console.log(`[getEnhancedProductInfo] Product ${product.name}: image=${primaryImage}, price=${price}, discount=${discount}`);
+  
   return {
-    image: firstSubProduct?.images?.[0]?.url || "/placeholder.png",
-    discount: firstSubProduct?.discount || 0,
-    featured: product.featured || false, // Explicitly preserve featured status
-    isFeatured: product.featured || false, // Add both property names for compatibility
-    sold: calculateTotalSoldCount(product), // Include sold count
+    image: primaryImage,
+    discount: discount,
+    price: price,
+    originalPrice: originalPrice,
+    featured: product.featured || false,
+    isFeatured: product.featured || false,
+    sold: calculateTotalSoldCount(product),
   };
 };
 
@@ -271,6 +321,7 @@ export const getSingleProduct = unstable_cache(
         .populate("category") // Relies on the 'ref' in Product schema for 'category'
         .populate("subCategories") // Relies on the 'ref' in Product schema for 'subCategories' (should be "SubCategory")
         .populate("reviews.reviewBy") // Relies on the 'ref' in Product schema for 'reviews.reviewBy'
+        .populate("vendorId", "name email description address phoneNumber zipCode verified commission availableBalance createdAt role") // Fetch comprehensive vendor information
         .lean();
       
       console.log("[getSingleProduct] Product after populate and lean:", product ? "Product data exists" : "Product data is null/undefined after lean");
@@ -341,6 +392,47 @@ export const getSingleProduct = unstable_cache(
             // Include other safe subCategory fields
           }))
         : [];
+
+      // --- Process Vendor with comprehensive information ---
+      const processedVendor = product.vendorId 
+        ? {
+            _id: product.vendorId._id?.toString(),
+            name: product.vendorId.name || "Unknown Vendor",
+            email: product.vendorId.email || "",
+            description: product.vendorId.description || "",
+            address: product.vendorId.address || "",
+            phoneNumber: product.vendorId.phoneNumber || "",
+            phone: product.vendorId.phoneNumber || "", // Alias for compatibility
+            zipCode: product.vendorId.zipCode || "",
+            role: product.vendorId.role || "vendor",
+            verified: product.vendorId.verified || false,
+            commission: product.vendorId.commission || 0,
+            availableBalance: product.vendorId.availableBalance || 0,
+            createdAt: product.vendorId.createdAt ? new Date(product.vendorId.createdAt).toISOString() : null,
+            // Additional business information if available
+            businessName: product.vendorId.businessName || product.vendorId.name || "",
+            storeName: product.vendorId.storeName || "",
+            website: product.vendorId.website || "",
+            businessType: product.vendorId.businessType || "",
+            rating: product.vendorId.rating || 0,
+            totalReviews: product.vendorId.totalReviews || 0,
+            // Address details
+            city: product.vendorId.city || "",
+            state: product.vendorId.state || "",
+            country: product.vendorId.country || "",
+            // Contact details
+            alternatePhone: product.vendorId.alternatePhone || "",
+            whatsappNumber: product.vendorId.whatsappNumber || "",
+            // Business hours and policies
+            businessHours: product.vendorId.businessHours || "",
+            returnPolicy: product.vendorId.returnPolicy || "",
+            shippingPolicy: product.vendorId.shippingPolicy || "",
+            // Social media and branding
+            logo: product.vendorId.logo || "",
+            banner: product.vendorId.banner || "",
+            socialMedia: product.vendorId.socialMedia || {},
+          }
+        : null;
       
       // --- Process Reviews ---
       // Count the number of reviews for each star rating
@@ -440,6 +532,8 @@ export const getSingleProduct = unstable_cache(
         slug: product.slug || "",
         category: processedCategory,
         subCategories: processedSubCategories,
+        vendor: processedVendor, // Updated with comprehensive vendor information
+        vendorId: product.vendorId?._id?.toString() || null, // Keep vendorId for compatibility
         details: processedDetails,
         benefits: processedBenefits,
         ingredients: processedIngredients,
@@ -559,7 +653,6 @@ export async function createProductReview(
 }
 
 //get product details by its ID:
-
 export async function getProductDetailsById(
   productId: string,
   style: number,
@@ -750,6 +843,267 @@ export async function getAllProducts() {
       products: [],
       success: false,
       message: error instanceof Error ? error.message : "Failed to fetch products"
+    };
+  }
+}
+
+// Get products by category ID
+export async function getProductsByCategory(categoryId: string) {
+  try {
+    await connectToDatabase();
+
+    const products = await Product.find({ category: categoryId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!products || products.length === 0) {
+      return {
+        products: [],
+        success: false,
+        message: "No products found in this category."
+      };
+    }
+
+    // Use enhanced product info to preserve featured status
+    const productsWithDetails = products.map(p => {
+      const enhancedInfo = getEnhancedProductInfo(p);
+      return {
+        ...p,
+        ...enhancedInfo, // This includes image, discount, featured, isFeatured, and sold
+      };
+    });
+
+    return {
+      products: JSON.parse(JSON.stringify(productsWithDetails)),
+      success: true,
+      message: "Products in category fetched successfully"
+    };
+  } catch (error) {
+    console.error("Error in getProductsByCategory:", error);
+    return {
+      products: [],
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to fetch products by category"
+    };
+  }
+}
+
+// Get products by subcategory slug
+export async function getProductsBySubCategory(subCategorySlug: string) {
+  try {
+    await connectToDatabase();
+    console.log(`[getProductsBySubCategory] Fetching products for subcategory: ${subCategorySlug}`);
+    
+    // Always try to resolve the subcategory first to get complete info
+    const subCategory = await SubCategory.findOne({ slug: subCategorySlug }).lean();
+    
+    if (!subCategory) {
+      // If we can't find by slug, check if it's an ID
+      console.log(`[getProductsBySubCategory] No subcategory found with slug: ${subCategorySlug}, checking if it's an ID`);
+      
+      // Only attempt ID lookup if it looks like a MongoDB ID
+      if (subCategorySlug.match(/^[0-9a-fA-F]{24}$/)) {
+        const subCategoryById = await SubCategory.findById(subCategorySlug).lean();
+        
+        if (!subCategoryById) {
+          console.log(`[getProductsBySubCategory] No subcategory found with ID: ${subCategorySlug}`);
+          return {
+            products: [],
+            success: false,
+            message: "Subcategory not found."
+          };
+        }
+        
+        // If found by ID, use that subcategory
+        console.log(`[getProductsBySubCategory] Found subcategory by ID: ${subCategoryById.name}`);
+        const subCategoryId = subCategoryById._id.toString();
+        
+        // Fetch products with this subcategory ID
+        const products = await fetchProductsBySubCategoryId(subCategoryId);
+        
+        return {
+          products: products,
+          subcategory: subCategoryById,
+          success: products.length > 0,
+          message: products.length > 0 
+            ? `Found ${products.length} products for subcategory ${subCategoryById.name}`
+            : "No products found in this subcategory."
+        };
+      }
+      
+      return {
+        products: [],
+        success: false,
+        message: "Subcategory not found."
+      };
+    }
+    
+    // We found the subcategory by slug
+    console.log(`[getProductsBySubCategory] Found subcategory: ${subCategory.name} with slug: ${subCategorySlug}`);
+    const subCategoryId = subCategory._id.toString();
+    
+    // Fetch products with this subcategory ID
+    const products = await fetchProductsBySubCategoryId(subCategoryId);
+    
+    return {
+      products: products,
+      subcategory: subCategory,
+      success: products.length > 0,
+      message: products.length > 0 
+        ? `Found ${products.length} products for subcategory ${subCategory.name}`
+        : "No products found in this subcategory."
+    };
+  } catch (error) {
+    console.error("Error in getProductsBySubCategory:", error);
+    return {
+      products: [],
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to fetch products by subcategory"
+    };
+  }
+}
+
+// Helper function to fetch products by subcategory ID with fallbacks
+async function fetchProductsBySubCategoryId(subCategoryId: string) {
+  // First try the most likely data structure
+  const products = await Product.find({ subCategories: { $in: [subCategoryId] } })
+    .sort({ createdAt: -1 })
+    .lean();
+  
+  console.log(`[fetchProductsBySubCategoryId] Primary query found ${products?.length || 0} products`);
+  
+  if (products && products.length > 0) {
+    // Process and return products
+    const productsWithDetails = products.map(p => {
+      const enhancedInfo = getEnhancedProductInfo(p);
+      return {
+        ...p,
+        ...enhancedInfo,
+        subcategoryId: subCategoryId,
+      };
+    });
+    
+    return JSON.parse(JSON.stringify(productsWithDetails));
+  }
+  
+  // Try fallback query if no products found
+  console.log(`[fetchProductsBySubCategoryId] No products found with primary query, trying fallbacks`);
+  
+  const fallbackProducts = await Product.find({
+    $or: [
+      { subCategories: subCategoryId },
+      { "subCategories._id": subCategoryId }, 
+      { subcategory: subCategoryId },
+      { "subcategory._id": subCategoryId }
+    ]
+  }).lean();
+  
+  console.log(`[fetchProductsBySubCategoryId] Fallback query found ${fallbackProducts?.length || 0} products`);
+  
+  if (fallbackProducts && fallbackProducts.length > 0) {
+    // Process and return fallback products
+    const productsWithDetails = fallbackProducts.map(p => {
+      const enhancedInfo = getEnhancedProductInfo(p);
+      return {
+        ...p,
+        ...enhancedInfo,
+        subcategoryId: subCategoryId,
+      };
+    });
+    
+    return JSON.parse(JSON.stringify(productsWithDetails));
+  }
+  
+  // Return empty array if no products found
+  return [];
+}
+
+// Get products by subcategory name (enhanced version)
+export async function getProductsBySubcategory(subcategoryName: string) {
+  try {
+    await connectToDatabase();
+    console.log(`[getProductsBySubcategory] Fetching products for subcategory name: ${subcategoryName}`);
+    
+    // First, find the subcategory by name to get its ID
+    const subCategory = await SubCategory.findOne({ 
+      name: { $regex: new RegExp(`^${subcategoryName}$`, 'i') } // Case-insensitive exact match
+    }).lean();
+    
+    if (!subCategory) {
+      console.log(`[getProductsBySubcategory] No subcategory found with name: ${subcategoryName}`);
+      return {
+        products: [],
+        success: false,
+        message: "Subcategory not found."
+      };
+    }
+    
+    console.log(`[getProductsBySubcategory] Found subcategory: ${subCategory.name} with ID: ${subCategory._id}`);
+    
+    // Now find products that reference this subcategory ID
+    const subCategoryId = subCategory._id.toString();
+    
+    // Try multiple query patterns to find products
+    const queries = [
+      { subCategories: { $in: [subCategoryId] } }, // Array of ObjectIds
+      { subCategories: subCategoryId }, // Direct reference
+      { "subCategories._id": subCategoryId }, // If populated
+      { subcategory: subCategoryId }, // Alternative field name
+      { "subcategory._id": subCategoryId } // Alternative populated field
+    ];
+    
+    let products: any[] = [];
+    
+    for (const query of queries) {
+      console.log(`[getProductsBySubcategory] Trying query:`, query);
+      
+      const foundProducts = await Product.find(query)
+        .sort({ createdAt: -1 })
+        .lean();
+      
+      console.log(`[getProductsBySubcategory] Query found ${foundProducts?.length || 0} products`);
+      
+      if (foundProducts && foundProducts.length > 0) {
+        products = foundProducts;
+        break; // Use the first successful query
+      }
+    }
+    
+    if (!products || products.length === 0) {
+      console.log(`[getProductsBySubcategory] No products found for subcategory: ${subcategoryName}`);
+      return {
+        products: [],
+        success: false,
+        message: `No products found in subcategory "${subcategoryName}".`
+      };
+    }
+    
+    // Process and return products with enhanced info
+    const productsWithDetails = products.map(p => {
+      const enhancedInfo = getEnhancedProductInfo(p);
+      return {
+        ...p,
+        ...enhancedInfo,
+        subcategoryId: subCategoryId,
+        subcategoryName: subcategoryName,
+      };
+    });
+    
+    console.log(`[getProductsBySubcategory] Successfully found ${productsWithDetails.length} products for subcategory: ${subcategoryName}`);
+    
+    return {
+      products: JSON.parse(JSON.stringify(productsWithDetails)),
+      subcategory: subCategory,
+      success: true,
+      message: `Found ${productsWithDetails.length} products for subcategory "${subcategoryName}"`
+    };
+    
+  } catch (error) {
+    console.error("Error in getProductsBySubcategory:", error);
+    return {
+      products: [],
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to fetch products by subcategory name"
     };
   }
 }

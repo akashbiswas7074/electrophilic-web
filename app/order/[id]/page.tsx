@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import mongoose from "mongoose";
 import { Metadata } from "next";
 import IdInvalidError from "@/components/shared/IdInvalidError";
 import { ReactElement, JSXElementConstructor, ReactNode, ReactPortal } from "react";
@@ -19,7 +19,7 @@ const OrderPage = async ({ params: paramsPromise }: { params: Promise<{ id: stri
   const { id } = params; // Destructure id directly
 
   // 1. Check if the ID is a valid MongoDB ObjectId
-  if (!ObjectId.isValid(id)) {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
     console.error(`[OrderPage] Invalid ObjectId format: ${id}`);
     return <IdInvalidError message="Invalid order ID format." />;
   }

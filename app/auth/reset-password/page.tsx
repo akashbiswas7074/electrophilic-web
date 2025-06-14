@@ -15,7 +15,7 @@ import { useWebsiteLogo } from '@/hooks/use-website-logo';
 function ResetPasswordFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams?.get('token');
   const { logo, isLoading: logoLoading } = useWebsiteLogo();
 
   const [password, setPassword] = useState('');

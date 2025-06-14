@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
 import { Heart, Loader2, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useProductOrderCountsContext } from '@/contexts/ProductOrderCountsContext';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
+import EnhancedImage from '@/components/shared/EnhancedImage';
+import { cn } from '@/lib/utils'; // Add missing cn import
 
 // Interface matching props from shopPage.tsx
 interface ProductCardProps {
@@ -141,24 +142,59 @@ const ProductCard = ({ product, layout = 'grid' }: ProductCardProps) => {
     }
   };
 
+  // Check if product is sold out
+  const isSoldOut = (() => {
+    // Check if all sizes are out of stock
+    if (Array.isArray(product.sizes) && product.sizes.length > 0) {
+      return product.sizes.every((size: any) => (size.qty || 0) <= 0);
+    }
+    
+    // Check if any subProducts are available
+    if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+      return product.subProducts.every((subProduct: any) => {
+        if (Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0) {
+          return subProduct.sizes.every((size: any) => (size.qty || 0) <= 0);
+        }
+        return (subProduct.quantity || 0) <= 0;
+      });
+    }
+    
+    return false;
+  })();
+
   // Grid layout (default)
   if (layout === 'grid') {
     return (
       <div 
-        className="group relative block overflow-hidden"
+        className={cn(
+          "group relative bg-white rounded-lg overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-200 hover:border-gray-300",
+          isSoldOut && "opacity-75"
+        )}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
         <Link href={`/product/${slug}`} className="block">
-          {/* Image container with aspect ratio */}
-          <div className="relative aspect-[3/4] w-full overflow-hidden bg-gray-100"> 
-            <Image
-              src={image || '/placeholder.png'}
+          <div className="relative aspect-[3/4] overflow-hidden bg-gray-50">
+            <EnhancedImage
+              src={image || ""}
               alt={name || "Product image"}
-              width={300}
-              height={400}
-              className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+              fill
+              placeholderType="product"
+              objectFit="cover"
+              showLoadingSpinner={true}
+              className="transition-transform duration-300 ease-in-out group-hover:scale-105"
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
             />
+
+            {/* Sold Out Overlay */}
+            {isSoldOut && (
+              <div className="absolute inset-0 flex items-center justify-center z-20">
+                <div className="bg-black/70 text-white font-bold px-4 py-2 rounded-md transform -rotate-12 text-lg shadow-lg">
+                  SOLD OUT
+                </div>
+              </div>
+            )}
+
             <div className="absolute top-2 left-2 flex flex-col gap-1">
               {isNew && (
                 <span className="bg-white text-black text-xs font-medium px-2 py-0.5 rounded-sm">Just In</span>
@@ -247,32 +283,16 @@ const ProductCard = ({ product, layout = 'grid' }: ProductCardProps) => {
       <Link href={`/product/${slug}`} className="flex gap-4 flex-1">
         {/* Image on the left */}
         <div className="relative w-32 h-32 flex-shrink-0 bg-gray-100 overflow-hidden"> 
-          <Image
-            src={image || '/placeholder.png'}
+          <EnhancedImage
+            src={image || ""}
             alt={name || "Product image"}
             fill
-            className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+            placeholderType="product"
+            objectFit="cover"
+            showLoadingSpinner={true}
+            className="transition-transform duration-300 ease-in-out group-hover:scale-105"
+            sizes="128px"
           />
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
-            {isNew && (
-              <span className="bg-white text-black text-xs font-medium px-2 py-0.5 rounded-sm">Just In</span>
-            )}
-            
-            {/* Featured Product Badge - Always show if product is featured */}
-            {isProductFeatured && (
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-medium px-2 py-0.5 rounded-sm">FEATURED</span>
-            )}
-            
-            {/* Bestseller Badge - Show if product is bestseller */}
-            {isBestseller && (
-              <div className="bg-orange-500 text-white text-xs font-medium px-2 py-0.5 rounded-sm flex items-center gap-1">
-                <span>Bestseller</span>
-                <span className="bg-white text-orange-600 text-[10px] px-1 py-0.5 rounded-sm font-semibold ml-1">
-                  {soldCount.toLocaleString()}+ sold
-                </span>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Details on the right */}

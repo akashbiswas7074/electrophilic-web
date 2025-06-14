@@ -1,9 +1,9 @@
 'use client';
 
 import { ProductCardSmall } from "@/components/shared/product/ProductCardSmall";
+import LazyProductCardSmall from "@/components/shared/product/LazyProductCardSmall";
 import FilterButton from "@/components/shared/shop/FilterButton";
-import SidebarFilters from "@/components/shared/shop/SidebarFilters";
-import { type SelectedFiltersState } from "@/components/shared/shop/FilterButton";
+import SidebarFilters, { type SelectedFiltersState } from "@/components/shared/shop/SidebarFilters";
 import { getAllProducts } from "@/lib/database/actions/product.actions";
 import { getAllCategories } from "@/lib/database/actions/categories.actions";
 import { getAllBrands } from "@/lib/database/actions/brands.actions";
@@ -11,7 +11,7 @@ import { getUniqueSubCategoryNames, getAllSubCategories } from "@/lib/database/a
 import { handleError } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Component, ErrorInfo, ReactNode } from "react";
 import { ChevronRight, X, Filter, SlidersHorizontal, Rows3, Grid, ArrowUpDown, Search } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -20,16 +20,64 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Badge } from "@/components/ui/badge";
 import { AnimatePresence, motion } from "framer-motion";
 
+// ErrorBoundary component to catch client-side errors
+class ErrorBoundary extends Component<{ children: ReactNode, fallback?: ReactNode }> {
+  state = { hasError: false, error: null as Error | null };
+  
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Shop page error:", error, errorInfo);
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      // You can render any custom fallback UI
+      return this.props.fallback || (
+        <div className="flex flex-col items-center justify-center p-10 text-center">
+          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+          <p className="mb-4 text-gray-600">We're having trouble loading the shop page.</p>
+          <p className="mb-6 text-sm text-gray-500">Technical details: {this.state.error?.message || 'Unknown error'}</p>
+          <Button 
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // Define Category type
 interface Category {
   _id: string;
   name: string;
+  slug?: string; // Add slug as optional to match SidebarFilters
+  subcategories?: any[]; // Add subcategories property
 }
 
 // Define Brand type
 interface Brand {
   _id: string;
   name: string;
+}
+
+// Define SubCategory type with parent relationships
+interface SubCategoryDetail {
+  _id: string;
+  name: string;
+  parent?: string | { _id: string };
+  category?: string | { _id: string };
+  categoryId?: string;
+  parentCategory?: string | { _id: string };
 }
 
 // Define the structure for transformed products to match ProductCard props
@@ -74,12 +122,37 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       return '';
     };
 
-    // Extract and safely convert category ID
-    const getCategoryId = (category: any): string => {
-      if (!category) return '';
-      if (typeof category === 'string') return category;
-      if (category._id) return safeToString(category._id);
-      return safeToString(category);
+    // Extract and safely convert category ID and name
+    const getCategoryInfo = (category: any): { id: string, name: string } => {
+      try {
+        if (!category) return { id: '', name: 'Category' };
+        
+        // If category is a string, use it as both ID and name
+        if (typeof category === 'string') return { id: category, name: category };
+        
+        // If category has _id but no name (common MongoDB reference pattern)
+        if (category._id) {
+          // First try to get the name directly
+          if (category.name) return { id: safeToString(category._id), name: category.name };
+          
+          // If we only have an ID reference, just use a generic name for now
+          // (we'll handle the lookup from categories array after fetching)
+          const categoryId = safeToString(category._id);
+          return { id: categoryId, name: 'Category' }; // Will be updated later
+        }
+        
+        // Handle other object formats - try to extract name and id
+        if (typeof category === 'object' && category !== null) {
+          const id = category.id || category._id || '';
+          const name = category.name || category.title || category.label || 'Category';
+          return { id: safeToString(id), name };
+        }
+        
+        return { id: safeToString(category), name: 'Category' };
+      } catch (error) {
+        console.error("[getCategoryInfo] Error extracting category info:", error);
+        return { id: '', name: 'Category' };
+      }
     };
 
     // Extract and safely convert brand ID/name
@@ -186,8 +259,7 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
     }
     
     // Map category info
-    const categoryId = getCategoryId(product.category);
-    const categoryName = product.category?.name || '';
+    const categoryInfo = getCategoryInfo(product.category);
     
     // Map brand info
     const brandInfo = getBrandInfo(product.brand);
@@ -209,6 +281,33 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
     // Calculate final price with discount, properly rounded
     const finalPrice = calculatePriceWithDiscount(basePrice, discountPercentage);
 
+    // Get subcategory information
+    const getSubcategoryName = () => {
+      try {
+        if (!product.subCategories) return '';
+        
+        // Handle array of subcategory objects
+        if (Array.isArray(product.subCategories) && product.subCategories.length > 0) {
+          const firstSubcat = product.subCategories[0];
+          if (firstSubcat) {
+            // Check if subcategory has a name property
+            if (typeof firstSubcat === 'string') return firstSubcat;
+            if (firstSubcat.name) return firstSubcat.name;
+            if (firstSubcat._id) return String(firstSubcat._id); // At least return ID if that's all we have
+          }
+        }
+        
+        // Handle direct string subcategory value
+        if (typeof product.subcategory === 'string') return product.subcategory;
+        if (product.subcategory?.name) return product.subcategory.name;
+        
+        return '';
+      } catch (error) {
+        console.error("[getSubcategoryName] Error getting subcategory name:", error);
+        return '';
+      }
+    };
+
     return {
       id: safeToString(product._id),
       name: product.name || '',
@@ -219,11 +318,9 @@ const transformProductSafely = (product: any): TransformedProduct | null => {
       image: getImageUrl(product),
       images: Array.isArray(product.images) ? product.images : [], // Pass images array if available
       slug: slug, // Use the processed slug
-      category: categoryName,
-      categoryId: categoryId,
-      subcategory: Array.isArray(product.subCategories) && product.subCategories.length > 0 
-        ? (product.subCategories[0]?.name || '') 
-        : '',
+      category: categoryInfo.name, // Use the resolved category name
+      categoryId: categoryInfo.id, // Use the resolved category ID
+      subcategory: getSubcategoryName(),
       brandId: brandInfo.id,
       brandName: brandInfo.name,
       stock: typeof product.stock === 'number' ? product.stock : 
@@ -251,6 +348,7 @@ const ShopPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<string[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [subCategoryDetails, setSubCategoryDetails] = useState<SubCategoryDetail[]>([]);
   
   // Loading states
   const [loading, setLoading] = useState<boolean>(true);
@@ -262,6 +360,13 @@ const ShopPage = () => {
     sale: [],
     brand: [],
     bestSelling: [],
+    isNew: [],
+    isFeatured: [],
+    inStock: [],
+    price: [0, 20000], // Add missing price property
+    rating: [], // Add missing rating property
+    color: [], // Add color property
+    size: [], // Add size property
   });
   const [priceRange, setPriceRange] = useState<number[]>([0, 20000]);
   
@@ -284,11 +389,12 @@ const ShopPage = () => {
         setLoading(true);
         
         // Fetch all required data in parallel
-        const [productsResponse, categoriesResponse, subcategoriesResult, brandsResponse] = await Promise.all([
+        const [productsResponse, categoriesResponse, subcategoriesResult, brandsResponse, allSubCategories] = await Promise.all([
           getAllProducts(),
           getAllCategories(),
           getUniqueSubCategoryNames(),
-          getAllBrands()
+          getAllBrands(),
+          getAllSubCategories()
         ]);
         
         // Handle products
@@ -327,6 +433,16 @@ const ShopPage = () => {
         // Handle subcategories
         setSubcategories(subcategoriesResult || []);
         
+        // Handle all subcategory details
+        if (allSubCategories && Array.isArray(allSubCategories)) {
+          setSubCategoryDetails(allSubCategories);
+        } else if (allSubCategories && allSubCategories.subCategories && Array.isArray(allSubCategories.subCategories)) {
+          setSubCategoryDetails(allSubCategories.subCategories);
+        } else {
+          console.error("[ShopPage] Failed to process subcategory details:", allSubCategories);
+          setSubCategoryDetails([]);
+        }
+        
         // Check and handle brands response
         if (brandsResponse && Array.isArray(brandsResponse)) {
           setBrands(brandsResponse);
@@ -346,6 +462,122 @@ const ShopPage = () => {
     
     fetchData();
   }, []);
+
+  // Update product category names after categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && products.length > 0) {
+      const categoryMap = new Map();
+      
+      // Create a lookup map for faster category lookup by ID
+      categories.forEach(category => {
+        if (category._id) {
+          categoryMap.set(category._id, category.name);
+        }
+      });
+      
+      // Update products with proper category names
+      const updatedProducts = products.map(product => {
+        // Always try to update the category if we have a categoryId
+        if (product.categoryId) {
+          const categoryName = categoryMap.get(product.categoryId);
+          if (categoryName) {
+            return {
+              ...product,
+              category: categoryName
+            };
+          }
+        }
+        return product;
+      });
+      
+      // Update products state only if there were changes
+      setProducts(updatedProducts);
+      
+      // Always update filtered products to ensure they have correct categories
+      const updatedFilteredProducts = filteredProducts.map(product => {
+        if (product.categoryId) {
+          const categoryName = categoryMap.get(product.categoryId);
+          if (categoryName) {
+            return {
+              ...product,
+              category: categoryName
+            };
+          }
+        }
+        return product;
+      });
+      
+      setFilteredProducts(updatedFilteredProducts);
+    }
+  }, [categories, products.length]);
+
+  // Ensure subcategory details have parent relationship with categories
+  useEffect(() => {
+    if (categories.length > 0 && subCategoryDetails.length > 0) {
+      console.log("Processing subcategory relationships");
+      console.log("Categories:", categories);
+      console.log("SubCategory details before processing:", subCategoryDetails);
+      
+      // Create enhanced subcategory details with parent information if missing
+      const enhancedSubCategoryDetails = subCategoryDetails.map(subcategory => {
+        // If subcategory already has parent info, keep it as is
+        if (subcategory.parent || subcategory.categoryId || subcategory.parentCategory) {
+          return subcategory;
+        }
+        
+        // Try to find parent category through product data
+        // This helps establish relationships when direct parent references are missing
+        const productsWithThisSubcategory = products.filter(p => 
+          p.subcategory === subcategory.name
+        );
+        
+        if (productsWithThisSubcategory.length > 0) {
+          // Get the category ID from the first product with this subcategory
+          const possibleParentId = productsWithThisSubcategory[0].categoryId;
+          
+          if (possibleParentId) {
+            console.log(`Found parent ${possibleParentId} for subcategory ${subcategory.name} through product data`);
+            return {
+              ...subcategory,
+              parent: possibleParentId
+            };
+          }
+        }
+        
+        // If we still don't have a parent, try other methods
+        for (const category of categories) {
+          // Check if category has subcategories array and this subcategory is in it
+          if (category.subcategories && 
+              Array.isArray(category.subcategories) && 
+              category.subcategories.some(sc => 
+                (typeof sc === 'string' && sc === subcategory.name) || 
+                (sc._id && sc._id === subcategory._id)
+              )) {
+            console.log(`Found parent ${category._id} for subcategory ${subcategory.name} through category data`);
+            return {
+              ...subcategory,
+              parent: category._id
+            };
+          }
+          
+          // Attempt to match by name similarity (last resort)
+          if (subcategory.name.includes(category.name) || category.name.includes(subcategory.name)) {
+            console.log(`Found possible parent ${category._id} for subcategory ${subcategory.name} through name similarity`);
+            return {
+              ...subcategory,
+              parent: category._id
+            };
+          }
+        }
+        
+        return subcategory;
+      });
+      
+      console.log("Enhanced subcategory details:", enhancedSubCategoryDetails);
+      // Update the subcategory details state with enhanced data
+      setSubCategoryDetails(enhancedSubCategoryDetails);
+    }
+  }, [categories, subCategoryDetails, products]);
 
   // Update filtered products when filters, search, or sort changes
   useEffect(() => {
@@ -368,16 +600,45 @@ const ShopPage = () => {
       result = result.filter(p => selectedFilters.category.includes(p.categoryId));
     }
     
-    // Apply subcategory filter
+    // Apply subcategory filter - Enhanced with more flexible matching
     if (selectedFilters.subcategory.length > 0) {
-      result = result.filter(p => 
-        p.subcategory && selectedFilters.subcategory.includes(p.subcategory)
-      );
+      result = result.filter(p => {
+        // If product has no subcategory data at all, it doesn't match
+        if (!p.subcategory) return false;
+        
+        // Try multiple matching approaches to handle different data structures
+        for (const selectedSubcategory of selectedFilters.subcategory) {
+          // Direct string match
+          if (p.subcategory === selectedSubcategory) return true;
+          
+          // Case-insensitive string match
+          if (p.subcategory.toLowerCase() === selectedSubcategory.toLowerCase()) return true;
+          
+          // Slug match (convert spaces to dashes)
+          const subcategorySlug = selectedSubcategory.toLowerCase().replace(/\s+/g, '-');
+          if (p.subcategory.toLowerCase().replace(/\s+/g, '-') === subcategorySlug) return true;
+          
+          // Partial match (subcategory contains the selected value)
+          if (p.subcategory.toLowerCase().includes(selectedSubcategory.toLowerCase())) return true;
+        }
+        
+        // No match found through any method
+        return false;
+      });
     }
     
-    // Apply brand filter
+    // Apply brand filter - Fix: Handle both brand ID and brand name matching
     if (selectedFilters.brand.length > 0) {
-      result = result.filter(p => selectedFilters.brand.includes(p.brandId));
+      result = result.filter(p => {
+        // Check if the product's brandId or brandName matches any selected brand
+        return selectedFilters.brand.includes(p.brandId) || 
+               selectedFilters.brand.includes(p.brandName) ||
+               // Also check if the selected brand name matches the product's brand name
+               selectedFilters.brand.some(selectedBrand => {
+                 const matchingBrand = brands.find(b => b._id === selectedBrand);
+                 return matchingBrand && (matchingBrand.name === p.brandName || matchingBrand.name === p.brandId);
+               });
+      });
     }
     
     // Apply sale filter
@@ -388,6 +649,24 @@ const ShopPage = () => {
     // Apply bestseller filter
     if (selectedFilters.bestSelling.includes('bestseller')) {
       result = result.filter(p => p.isBestseller);
+    }
+    
+    // Apply new arrivals filter
+    if (selectedFilters.isNew.includes('new')) {
+      result = result.filter(p => p.isNew);
+    }
+    
+    // Apply featured filter
+    if (selectedFilters.isFeatured.includes('featured')) {
+      result = result.filter(p => p.isFeatured || p.featured);
+    }
+    
+    // Apply in-stock filter
+    if (selectedFilters.inStock && selectedFilters.inStock.includes('inStock')) {
+      result = result.filter(p => {
+        const stock = typeof p.stock === 'number' ? p.stock : 0;
+        return stock > 0;
+      });
     }
     
     // Apply price range filter
@@ -436,6 +715,13 @@ const ShopPage = () => {
       sale: [],
       brand: [],
       bestSelling: [],
+      isNew: [],
+      isFeatured: [],
+      inStock: [],
+      price: [0, 20000] as [number, number], // Reset price range with proper typing
+      rating: [], // Reset rating
+      color: [], // Reset color
+      size: [], // Reset size
     });
     setPriceRange([0, 20000]);
     setSearchQuery('');
@@ -475,6 +761,14 @@ const ShopPage = () => {
         return 'On Sale';
       case 'bestSelling':
         return 'Best Selling';
+      case 'color':
+        return 'Color: ' + value;
+      case 'size':
+        return 'Size: ' + value;
+      case 'rating':
+        return 'Rating: ' + value + ' & Up';
+      case 'inStock':
+        return 'In Stock';
       default:
         return value;
     }
@@ -592,6 +886,7 @@ const ShopPage = () => {
             categories={categories}
             subCategoryNames={subcategories}
             brands={brands}
+            subCategoryDetails={subCategoryDetails}
             onApplyFilters={handleApplyFilters}
             onClearFilters={handleClearFilters}
             initialFilters={selectedFilters}
@@ -728,10 +1023,10 @@ const ShopPage = () => {
           {loading ? (
             // Loading skeleton
             <div className={`grid ${viewMode === 'grid' 
-              ? 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4' 
-              : 'grid-cols-1'} gap-6`}
+              ? 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8' 
+              : 'space-y-6'}`}
             >
-              {Array.from({ length: 8 }).map((_, index) => (
+              {Array.from({ length: 8 }).map((_: any, index: number) => (
                 <div key={`skeleton-${index}`} className="flex flex-col space-y-3">
                   <Skeleton className="h-60 w-full" />
                   <Skeleton className="h-5 w-4/5" />
@@ -753,10 +1048,13 @@ const ShopPage = () => {
                 ? 'grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8' 
                 : 'space-y-6'}`}
               >
-                {currentProducts.map((product) => (
-                  <ProductCardSmall 
+                {currentProducts.map((product, index) => (
+                  <LazyProductCardSmall 
                     key={product.id} 
                     product={product}
+                    index={index}
+                    loadingAnimation="skeleton"
+                    priority={index < 4} // Load the first 4 products immediately without lazy loading
                   />
                 ))}
               </div>
@@ -824,4 +1122,11 @@ const ShopPage = () => {
   );
 };
 
-export default ShopPage;
+// Replace the default export with a wrapped version
+const ShopPageWithErrorBoundary = () => (
+  <ErrorBoundary>
+    <ShopPage />
+  </ErrorBoundary>
+);
+
+export default ShopPageWithErrorBoundary;

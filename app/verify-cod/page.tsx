@@ -11,7 +11,7 @@ import { useCartStore } from "@/store/cart"; // Import useCartStore
 function VerifyCodPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const orderIdFromUrl = searchParams.get('orderId');
+  const orderIdFromUrl = searchParams?.get('orderId') || null;
 
   const [orderId, setOrderId] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");

@@ -18,12 +18,12 @@ import { useWebsiteLogo } from '@/hooks/use-website-logo';
 function SignInFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
-  const error = searchParams.get('error');
-  const trigger = searchParams.get('trigger');
-  const verified = searchParams.get('verified');
-  const initialEmail = searchParams.get('email') || '';
-  const initialTab = searchParams.get('tab') || 'email';
+  const callbackUrl = searchParams?.get('callbackUrl') || '/';
+  const error = searchParams?.get('error');
+  const trigger = searchParams?.get('trigger');
+  const verified = searchParams?.get('verified');
+  const initialEmail = searchParams?.get('email') || '';
+  const initialTab = searchParams?.get('tab') || 'email';
   const { logo, isLoading: logoLoading } = useWebsiteLogo();
 
   const [email, setEmail] = useState(initialEmail);

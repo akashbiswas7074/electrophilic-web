@@ -24,6 +24,12 @@ export interface IOrderItem {
   cancelRequested?: boolean;
   cancelReason?: string;
   cancelRequestedAt?: Date;
+  // Add review-related fields
+  reviewed?: boolean;
+  reviewId?: mongoose.Types.ObjectId | string;
+  reviewRating?: number;
+  reviewComment?: string;
+  reviewDate?: Date;
 }
 
 // Define IOrder interface for TypeScript
@@ -144,6 +150,27 @@ const OrderItemSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  // Add review-related fields to schema
+  reviewed: {
+    type: Boolean,
+    default: false
+  },
+  reviewId: {
+    type: ObjectId,
+    ref: "Product.reviews"
+  },
+  reviewRating: {
+    type: Number,
+    min: 1,
+    max: 5
+  },
+  reviewComment: {
+    type: String,
+    trim: true
+  },
+  reviewDate: {
+    type: Date
+  }
 });
 
 const orderSchema = new mongoose.Schema(

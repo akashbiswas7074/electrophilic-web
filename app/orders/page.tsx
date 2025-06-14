@@ -44,13 +44,23 @@ export default function OrdersPage() {
       if (status === "authenticated" && session?.user?.id) {
         try {
           setIsLoading(true);
-          const response = await fetch(`/api/user/orders?userId=${session.user.id}`);
+          // Fixed API call - remove userId parameter as it's handled by session
+          const response = await fetch(`/api/user/orders`);
           if (response.ok) {
             const data = await response.json();
-            setOrders(data.orders || []);
+            if (data.success) {
+              setOrders(data.orders || []);
+            } else {
+              console.error("Failed to fetch orders:", data.message);
+              setOrders([]);
+            }
+          } else {
+            console.error("HTTP error:", response.status, response.statusText);
+            setOrders([]);
           }
         } catch (error) {
           console.error("Error fetching orders:", error);
+          setOrders([]);
         } finally {
           setIsLoading(false);
         }

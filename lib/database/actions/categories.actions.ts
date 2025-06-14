@@ -29,6 +29,12 @@ interface CategoryResult {
   categories: LeanCategory[];
 }
 
+interface SingleCategoryResult {
+  success: boolean;
+  message: string;
+  category?: LeanCategory;
+}
+
 export const getAllCategories = unstable_cache(
   async (): Promise<CategoryResult> => { // Ensure Promise<CategoryResult> not undefined
     try {
@@ -65,5 +71,56 @@ export const getAllCategories = unstable_cache(
   ["all_categories"], // Cache key
   {
     revalidate: 1800, // Revalidate every 30 minutes (optional)
+  }
+);
+
+export const getCategoryBySlug = unstable_cache(
+  async (slug: string): Promise<SingleCategoryResult> => {
+    try {
+      if (!slug) {
+        return {
+          success: false,
+          message: "Category slug is required",
+        };
+      }
+
+      await connectToDatabase();
+      
+      // Find the category by slug
+      const category = await Category.findOne({ slug })
+        .select('_id name slug images createdAt updatedAt')
+        .lean();
+      
+      if (!category) {
+        return {
+          success: false,
+          message: `Category with slug "${slug}" not found`,
+        };
+      }
+
+      // Ensure the data is serializable for Next.js
+      const plainCategory: LeanCategory = JSON.parse(JSON.stringify(category));
+
+      return {
+        success: true,
+        message: "Category fetched successfully",
+        category: plainCategory,
+      };
+    } catch (error) {
+      const errorResult = handleError(error);
+      const errorMessage = 
+        typeof errorResult === 'object' && errorResult !== null && 'error' in errorResult && typeof errorResult.error === 'string'
+          ? errorResult.error
+          : "Failed to fetch category due to an unexpected error.";
+      
+      return {
+        success: false,
+        message: errorMessage,
+      };
+    }
+  },
+  ["category_by_slug"], // Cache key prefix
+  {
+    revalidate: 1800, // Revalidate every 30 minutes
   }
 );

@@ -1,4 +1,4 @@
-import { MapPin, Package, Truck, CheckCircle, Clock } from 'lucide-react';
+import { MapPin, Package, Truck, CheckCircle, Clock, Store } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -143,12 +143,39 @@ export default function OrderDetails({ order }: OrderDetailsProps) {
                             <p className="text-gray-400 line-through text-sm">₹{item.originalPrice.toFixed(2)}</p>
                           )}
                         </div>
+                        
+                        {/* Vendor Information - Enhanced */}
+                        {item.vendor && (
+                          <div className="mt-2 flex flex-col">
+                            <div className="flex items-center text-sm mb-1">
+                              <Store className="h-4 w-4 mr-1 text-gray-500" />
+                              <span className="text-gray-600 mr-1">Sold by:</span>
+                              <Badge variant="outline" className="bg-gray-50 text-gray-700">
+                                {typeof item.vendor === 'object' 
+                                  ? (item.vendor.businessName || item.vendor.name || 'Unknown Vendor')
+                                  : (typeof item.vendor === 'string' ? item.vendor : 'Unknown Vendor')}
+                              </Badge>
+                            </div>
+                            {typeof item.vendor === 'object' && item.vendor.email && (
+                              <div className="flex items-center text-sm text-gray-600 ml-5">
+                                <span>Contact: {item.vendor.email}</span>
+                                {item.vendor.phone && <span className="ml-2">| {item.vendor.phone}</span>}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       
                       <div className="mt-3 md:mt-0">
                         <OrderedProductDetailedView item={item} orderId={order._id} />
                       </div>
                     </div>
+                    
+                    {/* Detailed Order Item View Component */}
+                    <OrderedProductDetailedView
+                      item={item}
+                      orderId={order._id}
+                    />
                   </div>
                 </div>
               </CardContent>

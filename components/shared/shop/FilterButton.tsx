@@ -17,6 +17,13 @@ export interface SelectedFiltersState {
   sale: string[];
   brand: string[];
   bestSelling: string[];
+  color: string[];
+  size: string[];
+  isNew: string[];
+  isFeatured: string[];
+  inStock: string[];
+  price: [number, number];
+  rating: string[];
 }
 
 // Define Category type
@@ -49,6 +56,13 @@ const defaultInitialFilters: SelectedFiltersState = {
   sale: [],
   brand: [],
   bestSelling: [],
+  color: [],
+  size: [],
+  isNew: [],
+  isFeatured: [],
+  inStock: [],
+  price: [0, 20000],
+  rating: [],
 };
 
 const FilterButton = ({
@@ -68,21 +82,20 @@ const FilterButton = ({
   });
 
   const handleCheckboxChange = (
-    filterType: keyof SelectedFiltersState,
+    filterType: Exclude<keyof SelectedFiltersState, 'price'>,
     value: string,
     checked: boolean
   ) => {
     setSelectedFilters(prev => {
-      const currentValues = prev[filterType];
-      const safeCurrentValues = Array.isArray(currentValues) ? currentValues : [];
-
+      const currentValues = prev[filterType] as string[];
+      
       if (checked) {
-        if (!safeCurrentValues.includes(value)) {
-          return { ...prev, [filterType]: [...safeCurrentValues, value] };
+        if (!currentValues.includes(value)) {
+          return { ...prev, [filterType]: [...currentValues, value] };
         }
         return prev;
       } else {
-        return { ...prev, [filterType]: safeCurrentValues.filter((v: string) => v !== value) };
+        return { ...prev, [filterType]: currentValues.filter((v: string) => v !== value) };
       }
     });
   };

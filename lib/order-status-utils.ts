@@ -1,61 +1,45 @@
 /**
- * Utility functions for mapping between admin and website order statuses
+ * Utilities for handling order status mapping between website and admin formats
+ * This file ensures consistent status handling across the electrophilic-web project
  */
 
 /**
- * Maps admin panel status format to website format
- * @param status Admin panel status string
- * @returns Website status string
+ * Maps the website order status to admin status format
+ * @param {string} websiteStatus - Status from the website order model
+ * @returns {string} - Equivalent admin order status
  */
-export function mapAdminStatusToWebsite(status: string): string {
-  switch (status) {
-    case 'Not Processed':
-      return 'pending';
-    case 'Processing':
-      return 'processing';
-    case 'Confirmed':
-      return 'confirmed';
-    case 'Dispatched':
-      return 'shipped';
-    case 'Completed':
-      return 'delivered';
-    case 'Delivered':
-      return 'delivered';
-    case 'Cancelled':
-      return 'cancelled';
-    case 'Processing Refund':
-      return 'refunded';
-    case 'Refunded':
-      return 'refunded';
-    default:
-      // Return the original status if no mapping exists
-      return status.toLowerCase();
-  }
+export function mapWebsiteStatusToAdmin(websiteStatus: string): string {
+  const statusMap: Record<string, string> = {
+    'pending': 'Not Processed',
+    'processing': 'Processing',
+    'shipped': 'Dispatched',
+    'delivered': 'Delivered',
+    'cancelled': 'Cancelled',
+    'refunded': 'Processing Refund',
+    'completed': 'Completed'
+  };
+  return statusMap[websiteStatus] || 'Not Processed';
 }
 
 /**
- * Maps website status format to admin panel format
- * @param status Website status string
- * @returns Admin panel status string
+ * Maps the admin order status to website format
+ * @param {string} adminStatus - Status from the admin order model
+ * @returns {string} - Equivalent website order status
  */
-export function mapWebsiteStatusToAdmin(status: string): string {
-  switch (status) {
-    case 'pending':
-      return 'Not Processed';
-    case 'processing':
-      return 'Processing';
-    case 'confirmed':
-      return 'Confirmed';
-    case 'shipped':
-      return 'Dispatched';
-    case 'delivered':
-      return 'Completed';
-    case 'cancelled':
-      return 'Cancelled';
-    case 'refunded':
-      return 'Processing Refund';
-    default:
-      // Return the original status with first letter capitalized if no mapping exists
-      return status.charAt(0).toUpperCase() + status.slice(1);
-  }
+export function mapAdminStatusToWebsite(adminStatus: string): string {
+  const statusMap: Record<string, string> = {
+    'Not Processed': 'pending',
+    'Processing': 'processing',
+    'Dispatched': 'shipped',
+    'Delivered': 'delivered',
+    'Cancelled': 'cancelled',
+    'Processing Refund': 'refunded',
+    'Completed': 'completed'
+  };
+  return statusMap[adminStatus] || 'pending';
 }
+
+export default {
+  mapWebsiteStatusToAdmin,
+  mapAdminStatusToWebsite
+};
