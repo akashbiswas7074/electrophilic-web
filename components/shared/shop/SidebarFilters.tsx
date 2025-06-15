@@ -656,9 +656,21 @@ const SidebarFilters: React.FC<SidebarFiltersProps> = ({
                     <div className="flex items-center space-x-2 mb-2">
                       <Checkbox 
                         id="category-all-products"
-                        checked={pathname === '/shop'}
+                        checked={
+                          pathname === '/shop' && 
+                          selectedFilters.category.length === 0 && 
+                          selectedFilters.subcategory.length === 0 &&
+                          selectedFilters.brand.length === 0 &&
+                          selectedFilters.sale.length === 0 &&
+                          selectedFilters.bestSelling.length === 0 &&
+                          selectedFilters.isNew.length === 0 &&
+                          selectedFilters.isFeatured.length === 0 &&
+                          selectedFilters.inStock.length === 0 &&
+                          selectedFilters.rating.length === 0
+                        }
                         onCheckedChange={(checked: CheckedState) => {
                           if (checked) {
+                            // Clear all filters and navigate to shop page
                             const resetFilters = {
                               category: [],
                               subcategory: [],
@@ -673,13 +685,15 @@ const SidebarFilters: React.FC<SidebarFiltersProps> = ({
                               color: [],
                               size: []
                             };
+                            
+                            // Update local state immediately
                             setSelectedFilters(resetFilters);
                             setPriceRange([0, 20000]);
-                            // Apply the cleared filters via pendingFilterChange
-                            setPendingFilterChange({
-                              filters: resetFilters,
-                              range: [0, 20000]
-                            });
+                            
+                            // Apply the cleared filters
+                            onApplyFilters(resetFilters, [0, 20000]);
+                            
+                            // Navigate to shop page
                             router.push('/shop');
                           }
                         }}
@@ -698,9 +712,13 @@ const SidebarFilters: React.FC<SidebarFiltersProps> = ({
                       <div key={category._id} className="flex items-center space-x-2">
                         <Checkbox 
                           id={`category-${category._id}`} 
-                          checked={Boolean(selectedFilters.category.includes(category._id) || (pathname && pathname.includes(`/shop/category/${category.slug}`)))}
+                          checked={Boolean(
+                            selectedFilters.category.includes(category._id) || 
+                            (pathname && pathname.includes(`/shop/category/${category.slug}`))
+                          )}
                           onCheckedChange={(checked: CheckedState) => {
                             if (checked) {
+                              // When selecting a category, clear the "All Products" state
                               toggleFilter('category', category._id);
                             } else {
                               // Handle unchecking - only if it's not a disabled category

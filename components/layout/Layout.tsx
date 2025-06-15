@@ -9,33 +9,34 @@ const NavbarSkeleton = () => (
   <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
     {/* Top bar skeleton */}
     <div className="bg-gray-100 h-8 animate-pulse">
-      <div className="container mx-auto px-4 h-full flex items-center justify-center">
-        <div className="h-3 w-48 bg-gray-200 rounded"></div>
+      <div className="container mx-auto px-2 sm:px-4 h-full flex items-center justify-center">
+        <div className="h-3 w-32 sm:w-48 bg-gray-200 rounded"></div>
       </div>
     </div>
     
     {/* Main navbar skeleton */}
-    <div className="container mx-auto px-4 h-16 flex items-center justify-between animate-pulse">
-      <div className="h-8 w-32 bg-gray-200 rounded"></div>
+    <div className="px-2 sm:px-4 lg:px-6 mx-auto max-w-7xl h-14 sm:h-16 flex items-center justify-between animate-pulse">
+      <div className="h-6 w-20 sm:h-8 sm:w-32 bg-gray-200 rounded flex-shrink-0"></div>
       
       {/* Desktop navigation links */}
-      <div className="hidden md:flex space-x-6">
-        <div className="h-4 w-16 bg-gray-200 rounded"></div>
-        <div className="h-4 w-20 bg-gray-200 rounded"></div>
-        <div className="h-4 w-12 bg-gray-200 rounded"></div>
-        <div className="h-4 w-16 bg-gray-200 rounded"></div>
+      <div className="hidden md:flex space-x-4 lg:space-x-6">
+        <div className="h-4 w-12 lg:w-16 bg-gray-200 rounded"></div>
+        <div className="h-4 w-16 lg:w-20 bg-gray-200 rounded"></div>
+        <div className="h-4 w-10 lg:w-12 bg-gray-200 rounded"></div>
+        <div className="h-4 w-12 lg:w-16 bg-gray-200 rounded"></div>
       </div>
       
       {/* Search bar skeleton */}
-      <div className="hidden lg:flex flex-1 justify-center px-4">
-        <div className="w-full max-w-xl h-10 bg-gray-200 rounded-full"></div>
+      <div className="hidden lg:flex flex-1 justify-center px-2 xl:px-4 max-w-md mx-auto">
+        <div className="w-full h-8 lg:h-10 bg-gray-200 rounded-full"></div>
       </div>
       
       {/* Right section icons */}
-      <div className="flex items-center space-x-4">
-        <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
-        <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
-        <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
+      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="h-6 w-6 sm:h-8 sm:w-8 bg-gray-200 rounded-full"></div>
+        <div className="h-6 w-6 sm:h-8 sm:w-8 bg-gray-200 rounded-full"></div>
+        <div className="h-6 w-6 sm:h-8 sm:w-8 bg-gray-200 rounded-full"></div>
+        <div className="h-6 w-6 sm:h-8 sm:w-8 bg-gray-200 rounded-full md:hidden"></div>
       </div>
     </div>
   </div>
@@ -102,8 +103,8 @@ export default function Layout({ children }: LayoutProps) {
         <Navbar />
       </LazyLoadErrorBoundary>
       
-      {/* Main content area with proper spacing */}
-      <main className="flex-grow pt-24 w-full">
+      {/* Main content area with proper responsive spacing */}
+      <main className="flex-grow pt-20 sm:pt-24 w-full">
         {children}
       </main>
       

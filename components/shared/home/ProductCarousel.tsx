@@ -176,8 +176,8 @@ const ProductCarousel = ({
             <div
               key={product.id}
               // Adjusted slide width for better responsiveness and spacing
-              // 1 card on xs and sm, 3 cards on md+
-              className="embla__slide flex-[0_0_100%] md:flex-[0_0_calc(100%/3)] lg:flex-[0_0_calc(100%/3)] xl:flex-[0_0_calc(100%/3)] px-2 sm:px-3"
+              // 1 card on xs and sm, 4 cards on md+
+              className="embla__slide flex-[0_0_100%] md:flex-[0_0_calc(100%/4)] lg:flex-[0_0_calc(100%/4)] xl:flex-[0_0_calc(100%/4)] px-2 sm:px-3"
             >
               <ProductCardSmall product={product} />
             </div>
