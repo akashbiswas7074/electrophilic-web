@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { connectToDatabase } from "@/lib/database/connect";
 import HeroSection, { IHeroSection } from "../models/hero-section.model";
+import { syncHeroSectionsToWebsiteSections } from "./website.section.actions";
 
 /**
  * Create a new hero section
@@ -13,6 +14,9 @@ export async function createHeroSection(formData: any) {
     
     // Create the hero section
     const heroSection = await HeroSection.create(formData);
+    
+    // Sync hero sections to website sections
+    await syncHeroSectionsToWebsiteSections();
     
     revalidatePath("/admin/dashboard/hero-sections");
     revalidatePath("/");
@@ -53,6 +57,9 @@ export async function updateHeroSection(id: string, formData: any) {
       };
     }
     
+    // Sync hero sections to website sections
+    await syncHeroSectionsToWebsiteSections();
+    
     revalidatePath("/admin/dashboard/hero-sections");
     revalidatePath("/");
     
@@ -87,6 +94,9 @@ export async function deleteHeroSection(id: string) {
         message: "Hero section not found",
       };
     }
+    
+    // Sync hero sections to website sections (this will remove orphaned website sections)
+    await syncHeroSectionsToWebsiteSections();
     
     revalidatePath("/admin/dashboard/hero-sections");
     revalidatePath("/");
@@ -201,6 +211,9 @@ export async function toggleHeroSectionActive(id: string) {
     // Toggle the isActive status
     section.isActive = !section.isActive;
     await section.save();
+    
+    // Sync hero sections to website sections to update visibility
+    await syncHeroSectionsToWebsiteSections();
     
     revalidatePath("/admin/dashboard/hero-sections");
     revalidatePath("/");

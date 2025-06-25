@@ -25,11 +25,34 @@ export interface IHeroSection {
   contentAlignment?: 'left' | 'center' | 'right'; // Where to align the content
   mediaUrl?: string;       // URL for media (image or video)
   mediaType?: 'image' | 'video'; // Type of media
+  titleColor?: string;     // Color for the title text
+  descriptionColor?: string; // Color for the description text
+  buttonTextColor?: string; // Color for button text
+  buttonBackgroundColor?: string; // Background color for buttons
   richContent?: string;    // Rich HTML content for dynamic sections
   customCss?: string;      // Custom CSS for styling
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+// Define the schema for Button
+const ButtonSchema = new mongoose.Schema({
+  label: {
+    type: String,
+    required: [true, "Button label is required"],
+    trim: true,
+  },
+  link: {
+    type: String,
+    required: [true, "Button link is required"],
+    trim: true,
+  },
+  variant: {
+    type: String,
+    enum: ['primary', 'secondary', 'outline', 'ghost'],
+    default: 'primary',
+  }
+});
 
 // Define the schema for Hero Section
 const heroSectionSchema = new mongoose.Schema<IHeroSection>(
@@ -48,23 +71,12 @@ const heroSectionSchema = new mongoose.Schema<IHeroSection>(
       type: String,
       default: '',
     },
-    buttons: [
-      {
-        label: {
-          type: String,
-          required: true,
-        },
-        link: {
-          type: String,
-          required: true,
-        },
-        variant: {
-          type: String,
-          enum: ["primary", "secondary", "outline", "ghost"],
-          default: "primary",
-        },
-      },
-    ],
+    buttons: {
+      type: [ButtonSchema],
+      default: [],
+      // Remove the validation that requires at least one button
+      // This allows hero sections to exist without buttons
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -103,6 +115,22 @@ const heroSectionSchema = new mongoose.Schema<IHeroSection>(
       default: "image",
       required: true,
     },
+    titleColor: {
+      type: String,
+      default: '#000000',
+    },
+    descriptionColor: {
+      type: String,
+      default: '#333333',
+    },
+    buttonTextColor: {
+      type: String,
+      default: '#ffffff',
+    },
+    buttonBackgroundColor: {
+      type: String,
+      default: '#3b82f6',
+    },
     richContent: {
       type: String,
       default: '',
@@ -112,7 +140,11 @@ const heroSectionSchema = new mongoose.Schema<IHeroSection>(
       default: '',
     },
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    // Ensure all fields in the schema are stored
+    strict: true
+  }
 );
 
 // Create and export the model

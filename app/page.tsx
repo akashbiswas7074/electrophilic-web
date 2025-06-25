@@ -354,13 +354,26 @@ function calculateTotalSoldCount(product: any): number {
 // Define interface for hero sections
 interface HeroSection {
   _id: string;
-  title?: string;
-  subtitle?: string;
-  ctaText?: string;
-  ctaLink?: string;
-  isActive?: boolean;
-  image?: string;
-  // Add any other properties needed for hero sections
+  title: string;
+  subtitle: string;
+  longDescription?: string;
+  isActive: boolean;
+  order: number;
+  pattern: string;
+  contentAlignment?: string;
+  backgroundImage?: string;
+  mediaUrl?: string;
+  mediaType?: string;
+  titleColor?: string;
+  descriptionColor?: string;
+  buttonTextColor?: string;
+  buttonBackgroundColor?: string;
+  buttons: Array<{
+    _id?: string;
+    label: string;
+    link: string;
+    variant: "primary" | "secondary" | "outline" | "ghost";
+  }>;
 }
 
 // Define interface for website sections

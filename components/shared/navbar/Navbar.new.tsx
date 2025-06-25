@@ -323,19 +323,6 @@ const Navbar = () => {
                     </Button>
                   </Link>
                 )}
-
-                {/* Mobile menu button - hide on auth pages and when logged in */}
-                {!isAuthPage && status !== "authenticated" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="md:hidden hover:bg-gray-100 rounded-full transition-all duration-300
-                      active:scale-95 text-gray-700 h-8 w-8 sm:h-9 sm:w-9 p-2 ml-1"
-                    onClick={() => setIsMobileMenuOpen(true)}
-                  >
-                    <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
-                  </Button>
-                )}
               </div>
             </div>
           </div>
