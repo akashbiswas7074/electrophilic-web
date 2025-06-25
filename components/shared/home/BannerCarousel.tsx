@@ -23,7 +23,39 @@ interface BannerImage {
   clicks?: number;
 }
 
-const BannerCarousel: React.FC = () => {
+interface BannerCarouselProps {
+  priority?: boolean; // Whether this banner should load with high priority
+  skipLazyLoad?: boolean; // Skip lazy loading entirely (load immediately)
+  className?: string;
+  onBannerLoad?: () => void; // Callback when banners are loaded
+}
+
+// Enhanced skeleton loader for banner
+const BannerSkeleton = ({ isMobile }: { isMobile: boolean }) => (
+  <div className={`relative w-full ${isMobile ? "h-[250px]" : "h-[500px]"} overflow-hidden mb-[20px]`}>
+    <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
+    </div>
+    
+    {/* Skeleton navigation dots */}
+    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 flex space-x-2">
+      {[...Array(3)].map((_, i) => (
+        <div key={i} className="w-3 h-3 rounded-full bg-white/30 animate-pulse" />
+      ))}
+    </div>
+    
+    {/* Skeleton arrows */}
+    <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/20 animate-pulse" />
+    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/20 animate-pulse" />
+  </div>
+);
+
+const BannerCarousel: React.FC<BannerCarouselProps> = ({ 
+  priority = true, 
+  skipLazyLoad = false,
+  className = "",
+  onBannerLoad
+}) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMobileView, setIsMobileView] = useState(false);
   const [desktopBanners, setDesktopBanners] = useState<BannerImage[]>([]);
@@ -31,9 +63,40 @@ const BannerCarousel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [autoPlay, setAutoPlay] = useState(true);
+  const [isVisible, setIsVisible] = useState(skipLazyLoad);
+  const [hasStartedLoading, setHasStartedLoading] = useState(skipLazyLoad);
+  const [imagesLoaded, setImagesLoaded] = useState<Set<string>>(new Set());
+  
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const impressionsTracked = useRef<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
   const autoplayDuration = 5000; // 5 seconds
+
+  // Intersection Observer for lazy loading
+  useEffect(() => {
+    if (skipLazyLoad || hasStartedLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          setHasStartedLoading(true);
+          observer.disconnect();
+        }
+      },
+      {
+        root: null,
+        rootMargin: priority ? '200px' : '50px', // Load earlier if priority
+        threshold: 0.1,
+      }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [skipLazyLoad, hasStartedLoading, priority]);
 
   // Track banner impression once per session
   const trackImpression = useCallback(async (bannerId: string) => {
@@ -68,11 +131,14 @@ const BannerCarousel: React.FC = () => {
         body: JSON.stringify({ bannerId, type: 'click' }),
       });
     } catch (error) {
-      console.error('Failed to track banner click:', error);
+      console.error('Failed to banner click:', error);
     }
   }, []);
 
+  // Load banners data
   useEffect(() => {
+    if (!isVisible && !skipLazyLoad) return;
+
     const loadBanners = async () => {
       setLoading(true);
       setError(null);
@@ -84,6 +150,11 @@ const BannerCarousel: React.FC = () => {
         // Fetch mobile banners - these are already filtered and sorted by the backend
         const mobileResult = await fetchAllWebsiteBanners("mobile");
         setMobileBanners(Array.isArray(mobileResult) ? mobileResult : []);
+        
+        // Call onBannerLoad callback if provided
+        if (onBannerLoad) {
+          onBannerLoad();
+        }
       } catch (error) {
         console.error("Failed to load banners:", error);
         setError("Failed to load banner images. Please try again later.");
@@ -93,9 +164,12 @@ const BannerCarousel: React.FC = () => {
         setLoading(false);
       }
     };
-    loadBanners();
 
-    // Check if we're in mobile view
+    loadBanners();
+  }, [isVisible, skipLazyLoad, onBannerLoad]);
+
+  // Check mobile view
+  useEffect(() => {
     const checkMobileView = () => {
       setIsMobileView(window.innerWidth < 768);
     };
@@ -147,7 +221,7 @@ const BannerCarousel: React.FC = () => {
 
   // Set up autoplay
   useEffect(() => {
-    if (!autoPlay) {
+    if (!autoPlay || loading) {
       if (autoPlayRef.current) {
         clearInterval(autoPlayRef.current);
       }
@@ -161,7 +235,7 @@ const BannerCarousel: React.FC = () => {
     return () => {
       if (autoPlayRef.current) clearInterval(autoPlayRef.current);
     };
-  }, [autoPlay, nextSlide]);
+  }, [autoPlay, nextSlide, loading]);
 
   // Reset current index when mobile/desktop state or banner lists change
   useEffect(() => {
@@ -175,10 +249,16 @@ const BannerCarousel: React.FC = () => {
     }
   }, [error]);
 
-  if (loading) {
+  // Handle image load tracking
+  const handleImageLoad = useCallback((bannerId: string) => {
+    setImagesLoaded(prev => new Set(prev).add(bannerId));
+  }, []);
+
+  // Show skeleton while not visible or loading
+  if (!isVisible || loading) {
     return (
-      <div className={`relative w-full ${isMobileView ? "h-[250px]" : "h-[500px]"} flex items-center justify-center bg-gray-200 animate-pulse`}>
-        <div className="text-gray-500">Loading Banners...</div>
+      <div ref={containerRef} className={cn("lazy-loading-container", className)}>
+        <BannerSkeleton isMobile={isMobileView} />
       </div>
     );
   }
@@ -187,13 +267,13 @@ const BannerCarousel: React.FC = () => {
   if (banners.length === 0) {
     if (error) {
       return (
-        <div className={`relative w-full ${isMobileView ? "h-[250px]" : "h-[500px]"} flex items-center justify-center bg-gray-100`}>
+        <div className={cn(`relative w-full ${isMobileView ? "h-[250px]" : "h-[500px]"} flex items-center justify-center bg-gray-100`, className)}>
           <div className="text-red-500">Error loading banners. Please try again later.</div>
         </div>
       );
     }
     return (
-      <div className={`relative w-full ${isMobileView ? "h-[250px]" : "h-[500px]"} flex items-center justify-center bg-gray-100`}>
+      <div className={cn(`relative w-full ${isMobileView ? "h-[250px]" : "h-[500px]"} flex items-center justify-center bg-gray-100`, className)}>
         <div className="text-gray-500">No banners available.</div>
       </div>
     ); 
@@ -201,9 +281,13 @@ const BannerCarousel: React.FC = () => {
 
   return (
     <div
-      className={`relative w-full ${
-        isMobileView ? "h-[250px]" : "h-[500px]"
-      } overflow-hidden mb-[20px] group`}
+      ref={containerRef}
+      className={cn(
+        `relative w-full ${
+          isMobileView ? "h-[250px]" : "h-[500px]"
+        } overflow-hidden mb-[20px] group animate-fade-in`,
+        className
+      )}
       onMouseEnter={() => setAutoPlay(false)}
       onMouseLeave={() => setAutoPlay(true)}
     >
@@ -222,6 +306,8 @@ const BannerCarousel: React.FC = () => {
             <div className="w-full h-full">{children}</div>
           );
 
+        const isImageLoaded = imagesLoaded.has(banner.public_id);
+
         return (
           <div
             key={banner.public_id || index}
@@ -230,15 +316,25 @@ const BannerCarousel: React.FC = () => {
             }`}
           >
             <BannerWrapper>
+              {/* Show skeleton until image loads */}
+              {!isImageLoaded && (
+                <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-shimmer" />
+              )}
+              
               <Image
                 src={banner.url}
                 alt={banner.altText || `Banner ${index + 1}`}
                 fill
-                priority={index === 0}
+                priority={priority && index === 0} // First image gets priority loading
                 sizes="(max-width: 768px) 100vw, 1200px"
-                className="object-cover"
+                className={cn(
+                  "object-cover transition-opacity duration-300",
+                  isImageLoaded ? "opacity-100" : "opacity-0"
+                )}
+                onLoad={() => handleImageLoad(banner.public_id)}
                 onError={() => {
                   setError(`Failed to load banner image: ${banner.url}`);
+                  handleImageLoad(banner.public_id); // Mark as "loaded" to hide skeleton
                 }}
               />
             </BannerWrapper>
