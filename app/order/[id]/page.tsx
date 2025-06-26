@@ -548,11 +548,6 @@ const OrderPage = async ({ params: paramsPromise }: { params: Promise<{ id: stri
                 <div className="bg-gray-100 rounded-lg p-5">
                   <h2 className="text-lg font-semibold mb-4 border-b pb-2">Bill Details</h2>
                   <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span>Total MRP</span>
-                      {/* Display Total MRP directly from totalOriginalItemsPrice */}
-                      <span>₹{(order.totalOriginalItemsPrice || 0).toFixed(2)}</span>
-                    </div>
                     {productDiscount > 0 && (
                       <div className="flex justify-between text-green-600">
                         <span>Product Discount</span>
@@ -569,8 +564,14 @@ const OrderPage = async ({ params: paramsPromise }: { params: Promise<{ id: stri
                     )}
                      <div className="flex justify-between">
                       <span>Shipping Fee</span>
-                      {/* Display Shipping Fee */}
-                      <span>{order.shippingPrice > 0 ? `₹${order.shippingPrice.toFixed(2)}` : 'Free'}</span>
+                      {/* Display Shipping Fee with proper logic for free delivery threshold */}
+                      <span>
+                        {/* Check if total order amount is ≥ ₹500 for free shipping */}
+                        {(order.totalAmount >= 500) ? 'Free' : 
+                          // If total amount is less than 500, show shipping charge
+                          order.shippingPrice > 0 ? `₹${order.shippingPrice.toFixed(2)}` : '₹48.00'
+                        }
+                      </span>
                     </div>
                      {order.taxPrice > 0 && (
                        <div className="flex justify-between">

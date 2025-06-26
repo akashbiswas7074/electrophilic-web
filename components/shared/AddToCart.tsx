@@ -112,7 +112,7 @@ export default function AddToCart({
           name: product.name,
           slug: product.slug,
           price: sizeFinalPrice,
-          originalPrice: sizeOriginalPrice,
+          originalPrice: sizeOriginalPrice, // Ensure originalPrice is properly set
           discount: subProductDiscount,
           image: getPrimaryImage(),
           size: selectedSize,

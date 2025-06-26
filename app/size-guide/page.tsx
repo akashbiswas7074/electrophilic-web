@@ -1,126 +1,224 @@
-"use client"; // Add this directive for client components
+import React from "react";
+import { getActiveSizeGuide } from "@/lib/database/actions/size-guide.actions";
+import { Table, Ruler, Lightbulb } from "lucide-react";
+import { Metadata } from "next";
+import { generatePageMetadata } from "@/lib/metadata";
 
-import React, { useState } from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group";
-import { Button } from "@/components/ui/button"; // Import Button if needed
+// Type definitions for the size guide configuration
+interface SizeGuideSection {
+  title: string;
+  content: string;
+  icon: string;
+  order: number;
+  isActive: boolean;
+}
 
-// --- Sample Size Chart Data (Replace with your actual data source) ---
-const sizeChartData = {
-  // Example for footwear, adjust structure as needed
-  headers: ["US - Men's", "US - Women's", "UK", "CM/JP", "EU", "Foot length (in.)", "Foot length (cm)"],
-  sizes: [
-    { "US - Men's": "3.5", "US - Women's": "5",   "UK": "3",   "CM/JP": "22.5", "EU": "35.5", "Foot length (in.)": "8 1/2",   "Foot length (cm)": "21.6" },
-    { "US - Men's": "4",   "US - Women's": "5.5", "UK": "3.5", "CM/JP": "23",   "EU": "36",   "Foot length (in.)": "8 11/16", "Foot length (cm)": "22.0" },
-    { "US - Men's": "4.5", "US - Women's": "6",   "UK": "4",   "CM/JP": "23.5", "EU": "36.5", "Foot length (in.)": "8 13/16", "Foot length (cm)": "22.4" },
-    { "US - Men's": "5",   "US - Women's": "6.5", "UK": "4.5", "CM/JP": "23.5", "EU": "37.5", "Foot length (in.)": "9",       "Foot length (cm)": "22.9" },
-    { "US - Men's": "5.5", "US - Women's": "7",   "UK": "5",   "CM/JP": "24",   "EU": "38",   "Foot length (in.)": "9 3/16",  "Foot length (cm)": "23.3" },
-    { "US - Men's": "6",   "US - Women's": "7.5", "UK": "5.5", "CM/JP": "24",   "EU": "38.5", "Foot length (in.)": "9 5/16",  "Foot length (cm)": "23.7" },
-    { "US - Men's": "6.5", "US - Women's": "8",   "UK": "6",   "CM/JP": "24.5", "EU": "39",   "Foot length (in.)": "9 1/2",   "Foot length (cm)": "24.1" },
-    { "US - Men's": "7",   "US - Women's": "8.5", "UK": "6",   "CM/JP": "25",   "EU": "40",   "Foot length (in.)": "9 11/16", "Foot length (cm)": "24.5" },
-    { "US - Men's": "7.5", "US - Women's": "9",   "UK": "6.5", "CM/JP": "25.5", "EU": "40.5", "Foot length (in.)": "9 13/16", "Foot length (cm)": "25.0" },
-    { "US - Men's": "8",   "US - Women's": "9.5", "UK": "7",   "CM/JP": "26",   "EU": "41",   "Foot length (in.)": "10",      "Foot length (cm)": "25.4" },
-    { "US - Men's": "8.5", "US - Women's": "10",  "UK": "7.5", "CM/JP": "26.5", "EU": "42",   "Foot length (in.)": "10 3/16", "Foot length (cm)": "25.8" },
-    { "US - Men's": "9",   "US - Women's": "10.5","UK": "8",   "CM/JP": "27",   "EU": "42.5", "Foot length (in.)": "10 5/16", "Foot length (cm)": "26.2" },
-    { "US - Men's": "9.5", "US - Women's": "11",  "UK": "8.5", "CM/JP": "27.5", "EU": "43",   "Foot length (in.)": "10 1/2",  "Foot length (cm)": "26.7" },
-    { "US - Men's": "10",  "US - Women's": "11.5","UK": "9",   "CM/JP": "28",   "EU": "44",   "Foot length (in.)": "10 11/16","Foot length (cm)": "27.1" },
-    // ... add more sizes as needed
-  ]
-};
+interface SizeChartEntry {
+  size: string;
+  measurements: Record<string, string>;
+  order: number;
+}
 
-// You might want to fetch this data or pass it based on product category later
-const chartType = 'footwear';
-const title = "Nike Men's Footwear Size Chart";
-const description = "Find your size in the chart below. If you do not know your size, use the 'How to measure foot length' prompts at the bottom of the size guide to help you find the right size. Please note, the CM size displayed on shoe boxes and labels is different to foot length (cm).";
+interface SizeChart {
+  enabled: boolean;
+  measurementLabels: string[];
+  entries: SizeChartEntry[];
+}
 
-const SizeGuidePage = () => {
-  const [unit, setUnit] = useState<'in' | 'cm'>('in');
+interface HowToMeasure {
+  enabled: boolean;
+  content: string;
+  images?: string[];
+}
 
-  // Determine which columns to show based on the selected unit
-  const visibleHeaders = sizeChartData.headers.filter(header =>
-    unit === 'in' ? !header.includes('(cm)') : !header.includes('(in.)')
+interface FitTips {
+  enabled: boolean;
+  content: string;
+}
+
+interface SizeGuideConfig {
+  title: string;
+  subtitle?: string;
+  heroIcon: string;
+  sections: SizeGuideSection[];
+  sizeChart?: SizeChart;
+  howToMeasure?: HowToMeasure;
+  fitTips?: FitTips;
+  customCSS?: string;
+}
+
+// Generate metadata dynamically using website settings
+export async function generateMetadata(): Promise<Metadata> {
+  return await generatePageMetadata(
+    "Size Guide",
+    "Find your perfect fit with our comprehensive size guide"
   );
+}
+
+export default async function SizeGuidePage() {
+  const result = await getActiveSizeGuide();
+  
+  if (!result.success || !result.config) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Size Guide</h1>
+          <p className="text-gray-600">Size guide information is currently unavailable.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const config: SizeGuideConfig = result.config;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 lg:py-16">
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-semibold">{title}</h1>
-        {description && (
-          <p className="text-sm text-gray-600 mt-1">
-            {description}
-          </p>
-        )}
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Custom CSS injection */}
+      {config.customCSS && (
+        <style dangerouslySetInnerHTML={{ __html: config.customCSS }} />
+      )}
 
-      <div className="flex justify-end mb-4">
-        <ToggleGroup
-          type="single"
-          defaultValue="in"
-          value={unit}
-          onValueChange={(value) => { if (value) setUnit(value as 'in' | 'cm'); }}
-          className="border rounded-md p-0.5 bg-gray-100"
-          size="sm"
-        >
-          <ToggleGroupItem
-            value="in"
-            aria-label="Toggle inches"
-            className="px-3 py-1 data-[state=on]:bg-white data-[state=on]:shadow data-[state=on]:text-black text-gray-600 rounded-sm"
-          >
-            in.
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="cm"
-            aria-label="Toggle centimeters"
-            className="px-3 py-1 data-[state=on]:bg-white data-[state=on]:shadow data-[state=on]:text-black text-gray-600 rounded-sm"
-          >
-            cm
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <div className="text-6xl mb-4">{config.heroIcon}</div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">{config.title}</h1>
+          {config.subtitle && (
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">{config.subtitle}</p>
+          )}
+        </div>
 
-      <div className="overflow-x-auto">
-        <Table className="min-w-full border-collapse border border-gray-200">
-          <TableHeader className="bg-gray-50 sticky top-0">
-            <TableRow>
-              {visibleHeaders.map((header) => (
-                <TableHead key={header} className="px-3 py-2 border border-gray-200 text-xs font-semibold text-gray-600 whitespace-nowrap">
-                  {header.replace('(in.)', '').replace('(cm)', '').trim()}
-                </TableHead>
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="p-8 space-y-12">
+            {/* Content Sections */}
+            {config.sections
+              .filter(section => section.isActive)
+              .sort((a, b) => a.order - b.order)
+              .map((section, index) => (
+                <section key={index} className="space-y-6">
+                  <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
+                    <span className="text-3xl">{section.icon}</span>
+                    <h2 className="text-2xl font-bold text-gray-900">{section.title}</h2>
+                  </div>
+                  <div 
+                    className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: section.content }}
+                  />
+                </section>
               ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sizeChartData.sizes.map((sizeRow, rowIndex) => (
-              <TableRow key={rowIndex} className="hover:bg-gray-50">
-                {visibleHeaders.map((header) => (
-                  <TableCell key={`${rowIndex}-${header}`} className="px-3 py-2 border border-gray-200 text-sm text-gray-800 whitespace-nowrap">
-                    {sizeRow[header as keyof typeof sizeRow] || '-'}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
 
-      {/* Optional: Add "How to Measure" section here */}
-      <div className="mt-8 pt-8 border-t">
-         <h2 className="text-xl font-semibold mb-4">How to Measure Foot Length</h2>
-         {/* Add instructions, images, etc. */}
-         <p className="text-gray-700">Instructions on measuring foot length go here...</p>
+            {/* Size Chart */}
+            {config.sizeChart?.enabled && config.sizeChart && (
+              <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <Table className="h-6 w-6 text-blue-600" />
+                  <h2 className="text-xl font-semibold text-gray-900">Size Chart</h2>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-200">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-200 px-6 py-3 text-left text-sm font-medium text-gray-900">
+                          Size
+                        </th>
+                        {config.sizeChart.measurementLabels.map((label, index) => (
+                          <th key={index} className="border border-gray-200 px-6 py-3 text-left text-sm font-medium text-gray-900">
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {config.sizeChart.entries
+                        .sort((a, b) => a.order - b.order)
+                        .map((entry, index) => (
+                          <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                            <td className="border border-gray-200 px-6 py-4 font-medium text-gray-900">
+                              {entry.size}
+                            </td>
+                            {config.sizeChart!.measurementLabels.map((label, labelIndex) => (
+                              <td key={labelIndex} className="border border-gray-200 px-6 py-4 text-gray-700">
+                                {entry.measurements[label] || "-"}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* How to Measure */}
+            {config.howToMeasure?.enabled && config.howToMeasure && (
+              <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <Ruler className="h-6 w-6 text-green-600" />
+                  <h2 className="text-xl font-semibold text-gray-900">How to Measure</h2>
+                </div>
+                
+                <div 
+                  className="prose prose-gray max-w-none"
+                  dangerouslySetInnerHTML={{ __html: config.howToMeasure.content }}
+                />
+                
+                {config.howToMeasure.images && config.howToMeasure.images.length > 0 && (
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {config.howToMeasure.images.map((image, index) => (
+                      <img
+                        key={index}
+                        src={image}
+                        alt={`How to measure - Step ${index + 1}`}
+                        className="rounded-lg border border-gray-200"
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Fit Tips */}
+            {config.fitTips?.enabled && config.fitTips && (
+              <section className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <Lightbulb className="h-6 w-6 text-amber-600" />
+                  <h2 className="text-xl font-semibold text-gray-900">Fit Tips</h2>
+                </div>
+                
+                <div 
+                  className="prose prose-gray max-w-none"
+                  dangerouslySetInnerHTML={{ __html: config.fitTips.content }}
+                />
+              </section>
+            )}
+          </div>
+        </div>
+
+        {/* Contact Section */}
+        <div className="mt-12 text-center">
+          <div className="bg-blue-50 rounded-lg p-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Still Need Help?</h3>
+            <p className="text-gray-600 mb-4">
+              If you're unsure about sizing, our customer service team is here to help!
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <a 
+                href="/contact" 
+                className="inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Contact Support
+              </a>
+              <a 
+                href="/size-guide" 
+                className="inline-flex items-center justify-center px-6 py-3 bg-white text-blue-600 font-medium rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
+              >
+                View Full Guide
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default SizeGuidePage;
+}

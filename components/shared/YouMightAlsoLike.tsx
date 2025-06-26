@@ -7,6 +7,7 @@ import { ProductCardSmall } from "@/components/shared/product/ProductCardSmall";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Product {
   id: string;
@@ -182,13 +183,13 @@ const YouMightAlsoLike: React.FC<YouMightAlsoLikeProps> = ({
 
   if (loading) {
     return (
-      <section className={`py-12 bg-gray-50 ${className}`}>
-        <div className="w-[90%] mx-auto px-4 sm:px-6">
+      <section className={`py-8 sm:py-12 bg-gray-50 ${className}`}>
+        <div className="w-full max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="h-6 sm:h-8 bg-gray-300 rounded w-48 sm:w-64 mb-4 sm:mb-6"></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-64 bg-gray-200 rounded"></div>
+                <div key={i} className="h-64 sm:h-72 bg-gray-300 rounded-lg"></div>
               ))}
             </div>
           </div>
@@ -202,61 +203,136 @@ const YouMightAlsoLike: React.FC<YouMightAlsoLikeProps> = ({
   }
 
   return (
-    <section className={`py-12 bg-gray-50 ${className}`}>
-      <div className="w-[90%] mx-auto px-4 sm:px-6">
-        <div className="flex justify-between items-center mb-8">
-          <div>
+    <section className={`py-8 sm:py-12 bg-gray-50 ${className}`}>
+      <div className="w-full max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Mobile-optimized header */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4 sm:gap-0">
+          <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-6 w-6 text-blue-600" />
-              <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+              {/* <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" /> */}
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 leading-tight">
+                {title}
+              </h2>
             </div>
-            <p className="text-gray-600">{subtitle}</p>
+            <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
+              {subtitle}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          
+          {/* Mobile-optimized controls */}
+          <div className="flex items-center justify-between sm:justify-end gap-3">
             {showViewAll && (
-              <Link href={viewAllLink}>
+              <Link href={viewAllLink} className="flex-1 sm:flex-none">
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="border-blue-600 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+                  className="w-full sm:w-auto border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 
+                           text-xs sm:text-sm px-3 py-2 font-medium transition-all duration-200"
                 >
-                  View All
+                  <span className="hidden sm:inline">View All</span>
+                  <span className="sm:hidden">View All</span>
                 </Button>
               </Link>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full bg-white hover:bg-blue-100 text-blue-700"
-              onClick={scrollPrev}
-              disabled={!canScrollPrev}
-            >
-              <ChevronLeft className="h-5 w-5" />
-              <span className="sr-only">Previous</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full bg-white hover:bg-blue-100 text-blue-700"
-              onClick={scrollNext}
-              disabled={!canScrollNext}
-            >
-              <ChevronRight className="h-5 w-5" />
-              <span className="sr-only">Next</span>
-            </Button>
+            
+            {/* Navigation buttons - hidden on mobile, visible on tablet+ */}
+            <div className="hidden sm:flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 shadow-sm transition-all duration-200",
+                  canScrollPrev ? "hover:border-gray-300" : "opacity-50 cursor-not-allowed"
+                )}
+                onClick={scrollPrev}
+                disabled={!canScrollPrev}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="sr-only">Previous</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 shadow-sm transition-all duration-200",
+                  canScrollNext ? "hover:border-gray-300" : "opacity-50 cursor-not-allowed"
+                )}
+                onClick={scrollNext}
+                disabled={!canScrollNext}
+              >
+                <ChevronRight className="h-4 w-4" />
+                <span className="sr-only">Next</span>
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="embla overflow-hidden" ref={emblaRef}>
-          <div className="embla__container flex">
-            {recommendations.map((product) => (
-              <div
-                key={product.id}
-                className="embla__slide flex-[0_0_50%] sm:flex-[0_0_50%] md:flex-[0_0_25%] lg:flex-[0_0_25%] xl:flex-[0_0_25%] pl-4"
-              >
-                <ProductCardSmall product={product} />
-              </div>
-            ))}
+        {/* Mobile-optimized carousel */}
+        <div className="relative">
+          <div className="embla overflow-hidden -mx-2 sm:-mx-3" ref={emblaRef}>
+            <div className="embla__container flex">
+              {recommendations.map((product) => (
+                <div
+                  key={product.id}
+                  // Mobile: 1 card, Small: 1 card, Medium+: 4 cards with proper spacing
+                  className="embla__slide flex-[0_0_calc(100%-16px)] 
+                           sm:flex-[0_0_calc(100%-24px)] 
+                           md:flex-[0_0_calc(50%-24px)] 
+                           lg:flex-[0_0_calc(25%-24px)] 
+                           px-2 sm:px-3"
+                >
+                  <div className="h-full">
+                    <ProductCardSmall product={product} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Mobile-friendly navigation dots */}
+          {recommendations.length > 1 && (
+            <div className="flex justify-center mt-6 gap-2 sm:hidden">
+              {Array.from({ 
+                length: Math.ceil(recommendations.length / 1) // Show all dots on mobile since it's 1 card per view
+              }).map((_, index) => (
+                <button
+                  key={index}
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-all duration-200 touch-manipulation",
+                    index === 0 ? "bg-gray-600 w-4" : "bg-gray-300 hover:bg-gray-400"
+                  )}
+                  onClick={() => emblaApi?.scrollTo(index)}
+                  aria-label={`Go to slide ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* Desktop navigation dots */}
+          {recommendations.length > 4 && (
+            <div className="hidden sm:flex justify-center mt-6 gap-2">
+              {Array.from({ 
+                length: Math.ceil(recommendations.length / 4) // Desktop shows 4 cards per view
+              }).map((_, index) => (
+                <button
+                  key={index}
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-all duration-200",
+                    index === 0 ? "bg-gray-600 w-4" : "bg-gray-300 hover:bg-gray-400"
+                  )}
+                  onClick={() => emblaApi?.scrollTo(index * 4)}
+                  aria-label={`Go to slide group ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* Mobile swipe indicator */}
+          <div className="sm:hidden flex justify-center mt-4">
+            <div className="flex items-center gap-1 text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+              <span>Swipe to see more</span>
+              <ChevronRight className="h-3 w-3" />
+            </div>
           </div>
         </div>
       </div>

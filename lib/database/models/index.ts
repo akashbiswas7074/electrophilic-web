@@ -11,6 +11,7 @@ import './subCategory.model'; // Critical for the current error
 import './color.model';
 import './size.model';
 import './vendor.model';
+import './faq.model'; // Added FAQ model
 
 // Import models that might depend on the base models above
 import './product.model'; // Depends on User, Category, SubCategory

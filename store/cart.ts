@@ -9,6 +9,7 @@ type CartItem = {
   _id: string;
   name: string;
   price: number;
+  originalPrice?: number; // Add originalPrice as optional
   image: string;
   quantity: number; // Frontend quantity state
   qty?: number; // Keep for potential backend mapping if needed, but prefer quantity

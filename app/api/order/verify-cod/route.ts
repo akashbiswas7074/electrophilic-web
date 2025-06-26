@@ -7,6 +7,7 @@ import Cart from '@/lib/database/models/cart.model';
 import User from '@/lib/database/models/user.model';
 import { sendOrderConfirmationEmail } from '@/lib/email';
 import { handleError } from '@/lib/utils';
+import { calculateShippingCharge } from '@/lib/utils/shipping';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -128,18 +129,33 @@ export async function POST(request: NextRequest) {
       // --- End normalization ---
 
       // Convert the pending order to a regular order document
+      // Use the pre-calculated values from the pending order instead of recalculating
+      // since they were already correctly calculated during the initial order creation
+      const itemsPrice = pendingOrder.itemsPrice || 0;
+      const shippingPrice = pendingOrder.shippingPrice || 0;
+      const taxPrice = pendingOrder.taxPrice || 0;
+      const discountAmount = pendingOrder.discountAmount || 0;
+      const totalAmount = pendingOrder.totalAmount || pendingOrder.total || 0;
+      const totalOriginalItemsPrice = pendingOrder.totalOriginalItemsPrice || 0;
+      
+      console.log(`[API /api/order/verify-cod] Using pending order values: itemsPrice=₹${itemsPrice}, shippingPrice=₹${shippingPrice}, totalAmount=₹${totalAmount}, totalOriginalItemsPrice=₹${totalOriginalItemsPrice}`);
+
       const orderData = {
         user: pendingOrder.user,
         orderItems: pendingOrder.orderItems,
         shippingAddress: normalizedShippingAddress,
         deliveryAddress: normalizedDeliveryAddress,
-        totalAmount: pendingOrder.totalAmount,
-        total: total,
+        itemsPrice: itemsPrice,
+        totalOriginalItemsPrice: pendingOrder.totalOriginalItemsPrice, // Include this field
+        shippingPrice: shippingPrice, // Use pre-calculated shipping from pending order
+        taxPrice: taxPrice,
+        totalAmount: totalAmount, // Use pre-calculated total from pending order
+        total: totalAmount, // Use pre-calculated total from pending order
         paymentMethod: 'cod',
         paymentStatus: 'pending',
         status: 'processing', // Set directly to processing status
         couponApplied: pendingOrder.couponApplied,
-        discountAmount: pendingOrder.discountAmount,
+        discountAmount: discountAmount,
       };
 
       // Create and save the real order

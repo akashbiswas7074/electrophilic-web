@@ -228,8 +228,8 @@ const CategoryProductSection = ({
                 {transformedProducts.slice(0, 10).map((product) => product && (
                   <div
                     key={product.id}
-                    // Responsive slide width: 1 on mobile/sm, 3 on md+
-                    className="embla__slide flex-[0_0_100%] md:flex-[0_0_calc(100%/3)] px-2 sm:px-3"
+                    // Updated: 2 cards on mobile, 4 cards on desktop
+                    className="embla__slide flex-[0_0_50%] md:flex-[0_0_calc(100%/4)] px-2 sm:px-3"
                   >
                     <ProductCardSmall product={product} />
                   </div>

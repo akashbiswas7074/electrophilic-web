@@ -16,6 +16,7 @@ import { useCartStore } from "@/store/cart";
 import { applyCoupon } from "@/lib/database/actions/user.actions";
 import { getUserById } from "@/lib/database/actions/user.actions";
 import { getSavedCartForUser } from "@/lib/database/actions/cart.actions";
+import { calculateShippingCharge, qualifiesForFreeShipping, getAmountNeededForFreeShipping } from "@/lib/utils/shipping";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
 
 // Define interfaces for better type safety
@@ -434,6 +435,12 @@ export default function CheckoutComponent() {
   // --- Cart Items & Totals Calculation ---
   const cartItems: CartProduct[] = data?.products || [];
 
+  // Calculate shipping cost dynamically based on subtotal
+  useEffect(() => {
+    const calculatedShippingCost = calculateShippingCharge(subTotal);
+    setShippingCost(calculatedShippingCost);
+  }, [subTotal]);
+
   const totalSaved: number = cartItems.reduce((acc: number, curr: CartProduct) => {
     const originalPrice = Number(curr.originalPrice) || Number(curr.price) || 0;
     const currentPrice = Number(curr.price) || 0;
@@ -444,9 +451,13 @@ export default function CheckoutComponent() {
 
   const displaySubtotal = subTotal;
   const displayCartDiscount = totalSaved;
-  const displayShipping = shippingCost === 0 ? "Free" : `₹${shippingCost.toFixed(2)}`;
+  const displayShipping = shippingCost === 0 ? "FREE" : `₹${shippingCost.toFixed(2)}`;
   const totalBeforeCoupon = subTotal - totalSaved + shippingCost + taxCost;
   const finalTotal = totalAfterDiscount !== null ? totalAfterDiscount : totalBeforeCoupon;
+
+  // Calculate amount needed for free shipping
+  const amountNeededForFreeShipping = getAmountNeededForFreeShipping(subTotal);
+  const qualifiesForFree = qualifiesForFreeShipping(subTotal);
 
   // --- Button State Logic ---
   const isAddressStepValid = step === 1 && !!selectedAddressId;
@@ -532,16 +543,45 @@ export default function CheckoutComponent() {
     const checkoutDataPayload = { // Renamed to avoid conflict with CheckoutData interface
       userId: user._id,
       // Explicitly map only necessary fields, ensuring product is the ID string
-      cartItems: cartItems.map((item: any) => ({
-          product: typeof item.product === 'object' ? item.product._id : item.product, // Extract _id if product is an object
-          name: item.name,
-          qty: Number(item.quantity || item.qty || 0), // Ensure quantity is a number
-          price: item.price, // Selling price
-          originalPrice: item.originalPrice || item.price, // Original price, fallback to selling price
-          size: item.size,
-          image: item.image,
-          // Do NOT spread the whole item object (...item)
-      })),
+      cartItems: cartItems.map((item: any) => {
+          // Enhanced originalPrice calculation for checkout
+          let originalPrice = 0;
+          
+          // First priority: Use item's originalPrice if available
+          if (item.originalPrice && typeof item.originalPrice === 'number' && item.originalPrice > 0) {
+              originalPrice = item.originalPrice;
+          }
+          // Second priority: Calculate from discount if available
+          else if (item.discount && typeof item.discount === 'number' && item.discount > 0) {
+              // Calculate original price from current price and discount
+              originalPrice = item.price / (1 - (item.discount / 100));
+          }
+          // Third priority: Use product data if available
+          else if (item.product && typeof item.product === 'object') {
+              // Try to get original price from product structure
+              if (item.product.originalPrice && typeof item.product.originalPrice === 'number') {
+                  originalPrice = item.product.originalPrice;
+              } else if (item.product.price && typeof item.product.price === 'number') {
+                  originalPrice = item.product.price;
+              }
+          }
+          // Ultimate fallback to current price if no discount info available
+          else {
+              originalPrice = item.price || 0;
+          }
+          
+          return {
+              product: typeof item.product === 'object' ? item.product._id : item.product, // Extract _id if product is an object
+              name: item.name,
+              qty: Number(item.quantity || item.qty || 0), // Ensure quantity is a number
+              quantity: Number(item.quantity || item.qty || 0), // Include both fields for compatibility
+              price: item.price, // Selling price
+              originalPrice: originalPrice, // Enhanced original price calculation
+              size: item.size,
+              image: item.image
+              // Do NOT spread the whole item object (...item)
+          };
+      }),
       shippingAddress: orderShippingAddress,
       paymentMethod: paymentMethod,
       itemsPrice: subTotal,
@@ -1478,6 +1518,39 @@ export default function CheckoutComponent() {
 
             {/* Price Breakdown */}
             <div className="space-y-2 border-t pt-4">
+              {/* Free Shipping Progress Indicator */}
+              {!qualifiesForFree && amountNeededForFreeShipping > 0 && (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-md mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-blue-700">
+                      Add ₹{amountNeededForFreeShipping.toFixed(2)} more for FREE delivery!
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-100 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min((subTotal / 500) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-blue-600 mt-1">
+                    <span>₹{subTotal.toFixed(2)}</span>
+                    <span>₹500 (Free Shipping)</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Qualified for Free Shipping Banner */}
+              {qualifiesForFree && (
+                <div className="bg-green-50 border border-green-200 p-3 rounded-md mb-4">
+                  <div className="flex items-center text-green-700">
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">🎉 You qualify for FREE delivery!</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal:</span>
                 <span>₹ {displaySubtotal.toFixed(2)}</span>

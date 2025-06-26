@@ -235,36 +235,35 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product, viewMode = '
     }
   })();
   
-  // Enhanced price calculation with better error handling
+  // Enhanced price calculation with better error handling and proper discount logic
   const safePrice = (() => {
     try {
       if (typeof price === 'number' && !isNaN(price) && price > 0) return price;
       if (typeof price === 'string' && !isNaN(parseFloat(price)) && parseFloat(price) > 0) return parseFloat(price);
       
-      // Try to get price from sizes if the direct price is not available
-      if (Array.isArray(product.sizes) && product.sizes.length > 0 && product.sizes[0]) {
-        const firstSizePrice = product.sizes[0].price;
-        if (typeof firstSizePrice === 'number' && !isNaN(firstSizePrice) && firstSizePrice > 0) {
-          return firstSizePrice;
-        }
-      }
-      
       // Try to get price from subProducts if available
       if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
         const subProduct = product.subProducts[0];
         if (subProduct) {
-          // Try direct price on subProduct
-          if (typeof subProduct.price === 'number' && !isNaN(subProduct.price)) {
-            return subProduct.price;
-          }
-          
-          // Try size price on subProduct
+          // Try size price on subProduct first
           if (Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0 && subProduct.sizes[0]) {
             const firstSizePrice = subProduct.sizes[0].price;
             if (typeof firstSizePrice === 'number' && !isNaN(firstSizePrice)) {
               return firstSizePrice;
             }
           }
+          // Try direct price on subProduct
+          if (typeof subProduct.price === 'number' && !isNaN(subProduct.price)) {
+            return subProduct.price;
+          }
+        }
+      }
+      
+      // Try to get price from direct sizes if available
+      if (Array.isArray(product.sizes) && product.sizes.length > 0 && product.sizes[0]) {
+        const firstSizePrice = product.sizes[0].price;
+        if (typeof firstSizePrice === 'number' && !isNaN(firstSizePrice) && firstSizePrice > 0) {
+          return firstSizePrice;
         }
       }
       
@@ -277,20 +276,50 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product, viewMode = '
   
   const safeOriginalPrice = (() => {
     try {
+      // First check for explicit original price
       if (typeof originalPrice === 'number' && !isNaN(originalPrice) && originalPrice > 0) return originalPrice;
       if (typeof originalPrice === 'string' && !isNaN(parseFloat(originalPrice)) && parseFloat(originalPrice) > 0) return parseFloat(originalPrice);
-      return 0;
+      
+      // If no explicit original price, try to get from subProducts
+      if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+        const subProduct = product.subProducts[0];
+        if (subProduct) {
+          // Try size original price on subProduct first
+          if (Array.isArray(subProduct.sizes) && subProduct.sizes.length > 0 && subProduct.sizes[0]) {
+            const firstSizeOriginalPrice = subProduct.sizes[0].originalPrice;
+            if (typeof firstSizeOriginalPrice === 'number' && !isNaN(firstSizeOriginalPrice)) {
+              return firstSizeOriginalPrice;
+            }
+          }
+          // Try direct original price on subProduct
+          if (typeof subProduct.originalPrice === 'number' && !isNaN(subProduct.originalPrice)) {
+            return subProduct.originalPrice;
+          }
+        }
+      }
+      
+      // If still no original price found, use the safe price as original (means no discount)
+      return safePrice;
     } catch (error) {
       console.error("Error parsing original price:", error);
-      return 0;
+      return safePrice;
     }
   })();
   
   // Calculate discount value with error handling
   const computedDiscount = (() => {
     try {
+      // First check for explicit discount
       if (typeof discount === 'number' && !isNaN(discount) && discount > 0) return discount;
       if (typeof discount === 'string' && !isNaN(parseFloat(discount)) && parseFloat(discount) > 0) return parseFloat(discount);
+      
+      // Try to get discount from subProducts
+      if (Array.isArray(product.subProducts) && product.subProducts.length > 0) {
+        const subProduct = product.subProducts[0];
+        if (subProduct && typeof subProduct.discount === 'number' && subProduct.discount > 0) {
+          return subProduct.discount;
+        }
+      }
       
       // Calculate discount from prices if not explicitly provided
       if (safeOriginalPrice > 0 && safePrice > 0 && safeOriginalPrice > safePrice) {
@@ -304,28 +333,36 @@ export const ProductCardSmall: React.FC<ProductProps> = ({ product, viewMode = '
     }
   })();
   
-  // Check if there's a discount to show - only if prices are valid and discount is greater than 0
-  const showDiscount = safePrice > 0 && computedDiscount > 0;
-  
-  // Calculate final price correctly - if we have original price and discount, use that calculation
-  // otherwise fall back to the provided price
+  // Calculate final price correctly based on original price and discount
   let finalPrice = safePrice;
-  if (safeOriginalPrice > 0 && computedDiscount > 0) {
-    // Fix: Round the discounted price to 2 decimal places to avoid floating point issues
+  let actualOriginalPrice = safeOriginalPrice;
+  
+  // If we have a discount percentage, calculate the discounted price from original price
+  if (computedDiscount > 0 && safeOriginalPrice > 0) {
     finalPrice = Math.round((safeOriginalPrice * (1 - computedDiscount/100)) * 100) / 100;
-  } else if (safeOriginalPrice > 0) {
-    finalPrice = safePrice; // If we have original price but no discount, use the current price
+    actualOriginalPrice = safeOriginalPrice;
+  } 
+  // If we don't have discount but have both original and current price, use them as-is
+  else if (safeOriginalPrice > 0 && safePrice > 0 && safeOriginalPrice !== safePrice) {
+    finalPrice = safePrice;
+    actualOriginalPrice = safeOriginalPrice;
+  }
+  // If no discount scenario, just use the price as final price
+  else {
+    finalPrice = safePrice;
+    actualOriginalPrice = 0; // Don't show original price if there's no discount
   }
   
-  const displayMrp = safeOriginalPrice > 0 ? safeOriginalPrice : safePrice;
+  // Check if there's a meaningful discount to show
+  const showDiscount = computedDiscount > 0 && actualOriginalPrice > finalPrice;
   
   // Format prices for display
   const displayPrice = finalPrice > 0
     ? `₹${finalPrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : 'Price unavailable';
   
-  const displayOriginalPrice = displayMrp > 0
-    ? `₹${displayMrp.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  const displayOriginalPrice = showDiscount && actualOriginalPrice > 0
+    ? `₹${actualOriginalPrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
     : '';
   
   // Get sold count or default to "0" for products with no sales yet

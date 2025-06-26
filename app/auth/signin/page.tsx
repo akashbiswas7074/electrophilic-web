@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, CheckCircle, Phone } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, CheckCircle, Phone, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -118,35 +118,75 @@ function SignInFormContent() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
-      {/* Left column - Image/Brand section */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-gradient-to-tr from-primary to-primary-foreground opacity-90"></div>
-        <div className="absolute inset-0 bg-[url('/auth-pattern.svg')] opacity-30"></div>
-        <div className="relative z-10 flex flex-col justify-center px-8 py-12 text-white h-full">
-          <div className="mb-8">
-            <Image 
-              src={logo?.mobileLogoUrl || logo?.logoUrl || "/logo-white.png"} 
-              alt={logo?.altText || "Company Logo"} 
-              width={180} 
-              height={50}
-              className="mb-8"
-            />
-            <h1 className="text-4xl font-bold mb-6">Welcome Back!</h1>
-            <p className="text-lg opacity-80 mb-6">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-900 dark:via-gray-950 dark:to-gray-800">
+      {/* Background decoration */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-gradient-to-br from-gray-400/20 to-gray-500/20 blur-3xl"></div>
+        <div className="absolute top-1/2 -left-40 w-80 h-80 rounded-full bg-gradient-to-br from-gray-500/20 to-gray-600/20 blur-3xl"></div>
+        <div className="absolute -bottom-40 right-1/3 w-80 h-80 rounded-full bg-gradient-to-br from-gray-400/20 to-gray-300/20 blur-3xl"></div>
+      </div>
+
+      {/* Left column - Enhanced Image/Brand section */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-800 via-gray-700 to-gray-900"></div>
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=&quot;60&quot; height=&quot;60&quot; viewBox=&quot;0 0 60 60&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;%3E%3Cg fill=&quot;none&quot; fill-rule=&quot;evenodd&quot;%3E%3Cg fill=&quot;%23ffffff&quot; fill-opacity=&quot;0.1&quot;%3E%3Ccircle cx=&quot;30&quot; cy=&quot;30&quot; r=&quot;2&quot;/&gt;%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-20"></div>
+        
+        <div className="relative z-10 flex flex-col justify-center px-12 py-16 text-white h-full">
+          <div className="animate-fade-in">
+            <div className="flex items-center mb-8">
+              <Image 
+                src={logo?.mobileLogoUrl || logo?.logoUrl || "/logo-white.png"} 
+                alt={logo?.altText || "Company Logo"} 
+                width={200} 
+                height={60}
+                className="drop-shadow-lg"
+              />
+              <Sparkles className="ml-3 h-8 w-8 text-gray-300 animate-pulse" />
+            </div>
+            
+            <h1 className="text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
+              Welcome Back!
+            </h1>
+            <p className="text-xl opacity-90 mb-8 leading-relaxed">
               Sign in to access your account and continue your shopping experience with {logo?.name || "VibeCart"}.
             </p>
+            
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="text-center">
+                <div className="text-3xl font-bold">50K+</div>
+                <div className="text-sm opacity-80">Happy Customers</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">4.9★</div>
+                <div className="text-sm opacity-80">Rating</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold">99%</div>
+                <div className="text-sm opacity-80">Satisfaction</div>
+              </div>
+            </div>
           </div>
-          <div className="mt-auto">
-            <div className="p-6 bg-white bg-opacity-10 rounded-xl backdrop-blur-sm">
-              <p className="italic text-sm mb-3">"Shopping at {logo?.name || "VibeCart"} has been an amazing experience. Their user-friendly platform and exceptional customer service make online shopping a breeze."</p>
+          
+          <div className="mt-auto animate-slide-up">
+            <div className="p-8 bg-white/10 rounded-2xl backdrop-blur-md border border-white/20 shadow-2xl">
+              <div className="flex items-start mb-4">
+                <div className="flex -space-x-1 mr-4">
+                  {[1,2,3,4,5].map((i) => (
+                    <div key={i} className="w-3 h-3 rounded-full bg-gray-300"></div>
+                  ))}
+                </div>
+                <div className="text-sm opacity-90">5.0/5.0</div>
+              </div>
+              <p className="italic text-lg mb-4 leading-relaxed">
+                "Shopping at {logo?.name || "VibeCart"} has been an amazing experience. Their user-friendly platform and exceptional customer service make online shopping a breeze."
+              </p>
               <div className="flex items-center">
-                <div className="rounded-full bg-white h-10 w-10 flex items-center justify-center mr-3">
-                  <span className="text-primary font-bold">JS</span>
+                <div className="rounded-full bg-gradient-to-br from-white to-gray-200 h-12 w-12 flex items-center justify-center mr-4 shadow-lg">
+                  <span className="text-gray-700 font-bold text-lg">JS</span>
                 </div>
                 <div>
-                  <p className="font-medium">John Smith</p>
-                  <p className="text-xs opacity-80">{logo?.name || "VibeCart"} Customer</p>
+                  <p className="font-semibold text-lg">John Smith</p>
+                  <p className="text-sm opacity-80">Verified {logo?.name || "VibeCart"} Customer</p>
                 </div>
               </div>
             </div>
@@ -154,55 +194,68 @@ function SignInFormContent() {
         </div>
       </div>
 
-      {/* Right column - Form section */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12">
+      {/* Right column - Enhanced Form section */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12 relative z-10">
         <div className="w-full max-w-md">
-          <div className="text-center mb-8 lg:hidden">
+          {/* Mobile logo section */}
+          <div className="text-center mb-8 lg:hidden animate-fade-in">
             <Image 
               src={logo?.logoUrl || "/logo.png"} 
               alt={logo?.altText || "Company Logo"} 
-              width={150} 
-              height={40}
-              className="mx-auto mb-6"
+              width={160} 
+              height={50}
+              className="mx-auto mb-4 drop-shadow-md"
             />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome Back!</h1>
           </div>
           
-          <Card className="border-none shadow-lg dark:bg-gray-800">
-            <CardHeader className="space-y-1 text-center">
-              <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
-              <CardDescription>Enter your credentials to access your account</CardDescription>
+          <Card className="border-0 shadow-2xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl relative overflow-hidden animate-slide-up">
+            {/* Card decoration */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-600 via-gray-500 to-gray-700"></div>
+            
+            <CardHeader className="space-y-2 text-center pb-6">
+              <CardTitle className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                Sign In
+              </CardTitle>
+              <CardDescription className="text-base text-gray-600 dark:text-gray-400">
+                Enter your credentials to access your account
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            
+            <CardContent className="px-8">
               <Tabs defaultValue={initialTab === 'phone' ? 'phone' : 'email'}>
-                <TabsList className="grid grid-cols-2 mb-4">
-                  <TabsTrigger value="email" className="flex items-center gap-2">
+                <TabsList className="grid grid-cols-2 mb-6 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
+                  <TabsTrigger value="email" className="flex items-center gap-2 rounded-lg transition-all duration-200">
                     <Mail className="h-4 w-4" />
-                    <span>Email</span>
+                    <span className="font-medium">Email</span>
                   </TabsTrigger>
-                  <TabsTrigger value="phone" className="flex items-center gap-2">
+                  <TabsTrigger value="phone" className="flex items-center gap-2 rounded-lg transition-all duration-200">
                     <Phone className="h-4 w-4" />
-                    <span>Phone</span>
+                    <span className="font-medium">Phone</span>
                   </TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="email">
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                <TabsContent value="email" className="space-y-6">
+                  <form onSubmit={handleSubmit} className="space-y-6">
                     {formError && (
-                      <div className="flex items-center p-3 text-sm text-red-700 bg-red-50 rounded-md border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800">
-                        <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                      <div className="flex items-center p-4 text-sm text-red-700 bg-red-50 rounded-xl border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800 animate-shake">
+                        <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />
                         <span>{formError}</span>
                       </div>
                     )}
                     {successMessage && (
-                      <div className="flex items-center p-3 text-sm text-green-700 bg-green-50 rounded-md border border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800">
-                        <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                      <div className="flex items-center p-4 text-sm text-green-700 bg-green-50 rounded-xl border border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800 animate-bounce">
+                        <CheckCircle className="w-5 h-5 mr-3 flex-shrink-0" />
                         <span>{successMessage}</span>
                       </div>
                     )}
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-medium">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+                    
+                    <div className="space-y-3">
+                      <Label htmlFor="email" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        Email Address
+                      </Label>
+                      <div className="relative group">
+                        <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-gray-600 transition-colors" />
                         <Input
                           id="email"
                           type="email"
@@ -210,20 +263,26 @@ function SignInFormContent() {
                           value={email}
                           onChange={handleInputChange(setEmail)}
                           required
-                          className="pl-10"
+                          className="pl-12 h-12 border-2 border-gray-200 focus:border-gray-500 rounded-xl transition-all duration-200 bg-white/50 dark:bg-gray-800/50"
                           disabled={isLoading}
                         />
                       </div>
                     </div>
-                    <div className="space-y-2">
+                    
+                    <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                        <Link href="/auth/forgot-password" className="text-xs font-medium text-primary hover:underline">
+                        <Label htmlFor="password" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          Password
+                        </Label>
+                        <Link 
+                          href="/auth/forgot-password" 
+                          className="text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors hover:underline"
+                        >
                           Forgot Password?
                         </Link>
                       </div>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+                      <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-gray-600 transition-colors" />
                         <Input
                           id="password"
                           type={showPassword ? 'text' : 'password'}
@@ -231,47 +290,64 @@ function SignInFormContent() {
                           value={password}
                           onChange={handleInputChange(setPassword)}
                           required
-                          className="pl-10 pr-10"
+                          className="pl-12 pr-12 h-12 border-2 border-gray-200 focus:border-gray-500 rounded-xl transition-all duration-200 bg-white/50 dark:bg-gray-800/50"
                           disabled={isLoading}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                          className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
                       </div>
                     </div>
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? 'Signing In...' : 'Sign In'}
-                      {!isLoading && <LogIn className="ml-2 h-4 w-4" />}
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full h-12 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-900 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none" 
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          Signing In...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          Sign In
+                          <LogIn className="h-5 w-5" />
+                        </div>
+                      )}
                     </Button>
                   </form>
 
-                  <div className="relative my-6">
+                  <div className="relative my-8">
                     <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t dark:border-gray-700"></span>
+                      <span className="w-full border-t border-gray-300 dark:border-gray-600"></span>
                     </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-gray-500 dark:bg-gray-800 dark:text-gray-400">Or continue with</span>
+                    <div className="relative flex justify-center text-sm uppercase font-medium">
+                      <span className="bg-white/80 dark:bg-gray-800/80 px-4 text-gray-500 dark:text-gray-400 backdrop-blur-sm">
+                        Or continue with
+                      </span>
                     </div>
                   </div>
 
                   <Button
-                    className="w-full flex items-center justify-center gap-2 bg-white text-black hover:bg-gray-100 border border-gray-300"
+                    className="w-full h-12 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-200 hover:border-gray-300 font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] shadow-md"
                     onClick={handleGoogleSignIn}
                     disabled={isLoading}
                   >
-                    <Image
-                      src="/google.svg" 
-                      alt="Google"
-                      width={20}
-                      height={20}
-                      className="mr-2"
-                    />
-                    {isLoading ? 'Signing in...' : 'Sign in with Google'}
+                    <div className="flex items-center gap-3">
+                      <Image
+                        src="/google.svg" 
+                        alt="Google"
+                        width={24}
+                        height={24}
+                      />
+                      {isLoading ? 'Signing in...' : 'Sign in with Google'}
+                    </div>
                   </Button>
                 </TabsContent>
                 
@@ -280,20 +356,24 @@ function SignInFormContent() {
                 </TabsContent>
               </Tabs>
             </CardContent>
-            <CardFooter className="flex justify-center border-t pt-6 dark:border-gray-700">
+            
+            <CardFooter className="flex justify-center border-t border-gray-200 dark:border-gray-700 pt-8 pb-8">
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Don't have an account?{' '}
-                <Link href="/auth/signup" className="font-medium text-primary hover:underline">
+                <Link 
+                  href="/auth/signup" 
+                  className="font-semibold text-gray-700 hover:text-gray-900 transition-colors hover:underline"
+                >
                   Create Account
                 </Link>
               </p>
             </CardFooter>
           </Card>
           
-          <p className="text-center text-xs text-gray-500 mt-6 dark:text-gray-400">
+          <p className="text-center text-xs text-gray-500 mt-8 dark:text-gray-400 leading-relaxed">
             By signing in, you agree to our{' '}
-            <Link href="/terms" className="hover:underline">Terms of Service</Link> and{' '}
-            <Link href="/privacy" className="hover:underline">Privacy Policy</Link>.
+            <Link href="/terms" className="text-gray-600 hover:underline">Terms of Service</Link> and{' '}
+            <Link href="/privacy" className="text-gray-600 hover:underline">Privacy Policy</Link>.
           </p>
         </div>
       </div>
@@ -311,26 +391,28 @@ function getErrorMessage(error: string): string {
     case 'UsePhoneLogin':
       return 'This email is associated with a phone login. Please use the Phone tab to sign in.';
     case 'OAuthAccountNotLinked':
-      // This error might occur if a user tries to sign in with Google after signing up with email/password
-      // Or vice-versa. You might want to guide them on how to link accounts if you implement that.
       return 'This email is already associated with another sign-in method.';
-    case 'EmailCreateAccount': // Example custom error from authorize
+    case 'EmailCreateAccount':
       return 'Could not create account. Please try again.';
     case 'Callback':
       return 'There was an issue during the sign-in process. Please try again.';
-    // Add more specific NextAuth errors as needed
-    // https://next-auth.js.org/configuration/pages#error-page
     default:
       return 'Sign in failed. Please check your credentials or try another method.';
   }
 }
 
-// Wrap with Suspense for useSearchParams
+// Enhanced loading component
 export default function SignInPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200">
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-gray-200 rounded-full animate-pulse"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <p className="mt-4 text-gray-600 font-medium">Loading...</p>
+        </div>
       </div>
     }>
       <SignInFormContent />

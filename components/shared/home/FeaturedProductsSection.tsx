@@ -162,7 +162,8 @@ const FeaturedProductsSection = ({
             {enhancedProducts.map((product) => (
               <div
                 key={product.id}
-                className="embla__slide flex-[0_0_100%] md:flex-[0_0_calc(100%/3)] lg:flex-[0_0_calc(100%/4)] xl:flex-[0_0_calc(100%/4)] px-2 sm:px-3"
+                // Updated: 2 cards on mobile, 4 cards on desktop
+                className="embla__slide flex-[0_0_50%] md:flex-[0_0_calc(100%/4)] lg:flex-[0_0_calc(100%/4)] xl:flex-[0_0_calc(100%/4)] px-2 sm:px-3"
               >
                 <div className="bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg overflow-hidden border border-purple-100">
                   <ProductCardSmall 

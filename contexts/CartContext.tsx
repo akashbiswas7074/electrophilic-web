@@ -12,6 +12,7 @@ type CartItem = {
   _id: string;
   name: string;
   price: number;
+  originalPrice?: number; // Add originalPrice as optional property
   image: string;
   quantity: number; // Quantity in cart
   size?: string;

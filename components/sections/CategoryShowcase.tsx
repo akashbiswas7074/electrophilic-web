@@ -21,7 +21,7 @@ interface CategoryShowcaseProps {
   title?: string; // Optional title
 }
 
-const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({ categories = [], title = "Shop By Sport" }) => {
+const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({ categories = [], title = "Shop By Categories" }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel(
     { 
       loop: true, 
@@ -79,15 +79,15 @@ const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({ categories = [], ti
             return (
               <div
                 key={category._id}
-                // Adjust slide width: 1 on xs, 2 on sm, 3 on md+
-                className="embla__slide flex-[0_0_90%] sm:flex-[0_0_calc(100%/2.1)] md:flex-[0_0_calc(100%/3.1)] lg:flex-[0_0_calc(100%/3.1)] xl:flex-[0_0_calc(100%/3.1)] px-2 sm:px-3"
+                // 1 card on mobile, 2 cards on sm, 4 cards on desktop
+                className="embla__slide flex-[0_0_calc(100%-16px)] sm:flex-[0_0_calc(50%-12px)] lg:flex-[0_0_calc(25%-18px)] px-2 sm:px-3"
               >
-                <Link href={`/shop?category=${category.slug}`} className="group block relative aspect-[4/3] w-full overflow-hidden bg-gray-200">
+                <Link href={`/shop/category/${category.slug}`} className="group block relative aspect-[4/3] w-full overflow-hidden bg-gray-200">
                   <Image
                     src={imageUrl}
                     alt={category.name}
                     fill
-                    sizes="(max-width: 640px) 90vw, (max-width: 768px) 45vw, 30vw"
+                    sizes="(max-width: 1024px) 50vw, 25vw"
                     className="object-cover transition-transform duration-300 group-hover:scale-105 filter grayscale hover:grayscale-0"
                   />
                   <div className="absolute bottom-4 left-4">

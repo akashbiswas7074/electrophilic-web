@@ -13,6 +13,7 @@ import crypto from 'crypto'; // Import crypto for generating verification code
 import { sendCodVerificationEmail, sendOrderConfirmationEmail } from '@/lib/email'; // Import email functions
 import bcrypt from 'bcryptjs'; // Added for hashing COD verification codes
 import { mapAdminStatusToWebsite } from "@/lib/order-status-utils";
+import { calculateShippingCharge } from '@/lib/utils/shipping';
 
 // Define the expected structure for checkout data
 interface CheckoutData {
@@ -65,12 +66,26 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
       shippingAddress,
       paymentMethod,
       itemsPrice,
-      shippingPrice,
+      shippingPrice, // This will be overridden with calculated shipping
       taxPrice = 0,
-      totalPrice,
+      totalPrice, // This will be recalculated
       couponCode,
       discountAmount = 0,
     } = data;
+
+    // Calculate shipping charge dynamically based on items price
+    const calculatedShippingPrice = calculateShippingCharge(itemsPrice);
+    
+    // Recalculate total price with correct shipping
+    const recalculatedTotalPrice = itemsPrice + calculatedShippingPrice + taxPrice - discountAmount;
+
+    console.log(`[processCheckoutSteps] Shipping calculation: itemsPrice=₹${itemsPrice}, calculatedShipping=₹${calculatedShippingPrice}, taxPrice=₹${taxPrice}, discountAmount=₹${discountAmount}, recalculatedTotal=₹${recalculatedTotalPrice}`);
+
+    // Use calculated values instead of passed values
+    const finalShippingPrice = calculatedShippingPrice;
+    const finalTotalPrice = recalculatedTotalPrice;
+
+    console.log(`[processCheckoutSteps] Final values: finalShippingPrice=₹${finalShippingPrice}, finalTotalPrice=₹${finalTotalPrice}`);
 
     // 1. Validate User (within transaction)
     const user = await User.findById(userId).session(session);
@@ -221,9 +236,45 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
         const requestedQty = (typeof item.quantity === 'number' && item.quantity > 0) ? item.quantity : ((typeof item.qty === 'number' && item.qty > 0) ? item.qty : 1);
         const productName = productDetails?.name || item.name || `Product ID ${productId}`;
 
-        // Ensure originalPrice is captured from the cart item or product details
-        // This assumes cart item has originalPrice, if not, fallback to productDetails or price itself
-        const originalItemPrice = item.originalPrice || productDetails?.price || item.price;
+        // Enhanced originalPrice calculation
+        let originalItemPrice = 0;
+        
+        // First try to get from cart item
+        if (item.originalPrice && typeof item.originalPrice === 'number' && item.originalPrice > 0) {
+            originalItemPrice = item.originalPrice;
+        } 
+        // If not available in cart, calculate from product details
+        else if (productDetails) {
+            // Try to get original price from product structure
+            if (productDetails.subProducts && productDetails.subProducts.length > 0) {
+                const subProduct = productDetails.subProducts[0];
+                
+                // If product has sizes, get original price from matching size
+                if (subProduct.sizes && Array.isArray(subProduct.sizes) && item.size) {
+                    const matchingSize = subProduct.sizes.find((s: any) => s.size === item.size);
+                    if (matchingSize) {
+                        originalItemPrice = matchingSize.originalPrice || matchingSize.price || 0;
+                    }
+                }
+                
+                // If no size match or no sizes, use subProduct original price
+                if (originalItemPrice === 0) {
+                    originalItemPrice = subProduct.originalPrice || subProduct.price || 0;
+                }
+            }
+            
+            // Final fallback to main product price
+            if (originalItemPrice === 0) {
+                originalItemPrice = productDetails.originalPrice || productDetails.price || 0;
+            }
+        }
+        
+        // Ultimate fallback to current item price
+        if (originalItemPrice === 0) {
+            originalItemPrice = item.price || 0;
+        }
+
+        console.log(`[processCheckoutSteps] Product ${productName}: originalPrice=${originalItemPrice}, sellingPrice=${item.price}`);
 
         return {
             product: new mongoose.Types.ObjectId(productId),
@@ -232,7 +283,7 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
             quantity: requestedQty,
             qty: requestedQty,
             price: item.price, // Selling price from cart item
-            originalPrice: originalItemPrice, // Original price
+            originalPrice: originalItemPrice, // Enhanced original price calculation
             size: item.size,
             image: item.image,
         };
@@ -289,14 +340,16 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
       deliveryAddress: deliveryAddress,
       itemsPrice: itemsPrice,
       totalOriginalItemsPrice: totalOriginalItemsPrice,
-      shippingPrice: shippingPrice,
+      shippingPrice: finalShippingPrice, // Use calculated shipping price
       taxPrice: taxPrice,
-      totalAmount: totalPrice,
-      total: totalPrice,
+      totalAmount: finalTotalPrice, // Use recalculated total
+      total: finalTotalPrice, // Use recalculated total
       paymentMethod: paymentMethod,
       couponApplied: couponCode || undefined,
       discountAmount: discountAmount || 0,
     };
+
+    console.log(`[processCheckoutSteps] OrderData created with: itemsPrice=₹${orderData.itemsPrice}, shippingPrice=₹${orderData.shippingPrice}, totalAmount=₹${orderData.totalAmount}, total=₹${orderData.total}, totalOriginalItemsPrice=₹${orderData.totalOriginalItemsPrice}`);
 
     // --- FIX: Ensure shippingAddress and total are included in orderData for COD verification (real order creation) ---
     // When converting a pending COD order to a real order (after verification), ensure both shippingAddress and total are set
@@ -330,10 +383,10 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
         deliveryAddress: deliveryAddress,
         itemsPrice: itemsPrice, // Sum of (selling price * qty)
         totalOriginalItemsPrice: totalOriginalItemsPrice, // Sum of (original price * qty)
-        shippingPrice: shippingPrice,
+        shippingPrice: finalShippingPrice, // Use calculated shipping price
         taxPrice: taxPrice,
-        totalAmount: totalPrice, 
-        total: totalPrice, // <--- Ensure this is set
+        totalAmount: finalTotalPrice, // Use recalculated total
+        total: finalTotalPrice, // Use recalculated total
         paymentMethod: 'cod',
         paymentStatus: 'pending',
         codVerificationCode: hashedVerificationCode,
@@ -451,7 +504,7 @@ export async function processCheckoutSteps(data: CheckoutData): Promise<any> {
         key_secret: process.env.RAZORPAY_KEY_SECRET!
       });
       const rzrOrder = await razorpay.orders.create({
-        amount: Math.round(totalPrice * 100), // Amount in paise
+        amount: Math.round(finalTotalPrice * 100), // Use finalTotalPrice instead of totalPrice
         currency: 'INR',
         receipt: savedOrder._id.toString(),
         notes: { order_id: savedOrder._id.toString() }

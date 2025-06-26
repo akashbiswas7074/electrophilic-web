@@ -31,11 +31,40 @@ import IdInvalidError from "@/components/shared/IdInvalidError";
 import { useCart } from "@/contexts/CartContext";
 import YouMightAlsoLike from "@/components/shared/YouMightAlsoLike";
 import MoreFromThisCategory from "@/components/shared/MoreFromThisCategory";
+import FAQSection from "@/components/shared/FAQSection";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
 import ProductReviewsContainer from "@/components/shared/product/ProductReviewsContainer";
+import { getActiveShippingReturns } from '@/lib/database/actions/shipping-returns.actions';
+
+// Interface for shipping & returns data
+interface ShippingReturnsConfig {
+  title: string;
+  subtitle: string;
+  shippingOptions: Array<{
+    title: string;
+    description: string;
+    icon: string;
+    minOrderAmount: number;
+    deliveryTime: string;
+    cost: number;
+    isActive: boolean;
+    order: number;
+  }>;
+  returnInfo: Array<{
+    title: string;
+    description: string;
+    icon: string;
+    returnPeriodDays: number;
+    conditions: string[];
+    isActive: boolean;
+    order: number;
+  }>;
+  additionalInfo: string;
+  customCSS: string;
+}
 
 // Lazy load heavy components
 const ProductCard = lazy(() => import("@/components/shared/ProductCard"));
@@ -389,7 +418,7 @@ const ProductPage = () => {
         slug: productData.slug,
         quantity: 1,
         qty: 1,
-        originalPrice: originalPrice,
+        originalPrice: originalPrice, // Ensure originalPrice is properly set
         discount: subProductDiscount,
         availableQty: availableQty,
         // No size property for products without sizes
@@ -670,6 +699,34 @@ const ProductPage = () => {
     }
   }, [productData, productInitialized, handleEmptySizeProductAddToCart]);
 
+  // --- Fetch and manage shipping & returns data ---
+  const [shippingReturnsData, setShippingReturnsData] = useState<ShippingReturnsConfig | null>(null);
+  const [shippingReturnsLoading, setShippingReturnsLoading] = useState(true);
+  const [shippingReturnsError, setShippingReturnsError] = useState<string | null>(null);
+
+  const fetchShippingReturnsData = useCallback(async () => {
+    setShippingReturnsLoading(true);
+    setShippingReturnsError(null);
+    try {
+      const data = await getActiveShippingReturns();
+      console.log("Fetched shipping & returns data:", data);
+      if (data.success && data.config) {
+        setShippingReturnsData(data.config);
+      } else {
+        throw new Error("Invalid response format from shipping & returns API");
+      }
+    } catch (error: any) {
+      console.error("Error fetching shipping & returns data:", error);
+      setShippingReturnsError(error.message || "Failed to load shipping & returns information.");
+    } finally {
+      setShippingReturnsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchShippingReturnsData();
+  }, [fetchShippingReturnsData]);
+
   // --- Render Logic ---
   if (isLoading) {
     return <ProductPageSkeleton />;
@@ -928,6 +985,19 @@ const ProductPage = () => {
               viewAllLink="/shop"
               autoplay={true}
             />
+            
+            {/* FAQ Section for Products */}
+            <div className="bg-gray-50 py-12 mt-6">
+              <div className="w-[90%] mx-auto px-4 sm:px-6">
+                <FAQSection 
+                  category="Products" 
+                  title="Frequently Asked Questions" 
+                  maxItems={5}
+                  showTags={true}
+                  className="max-w-4xl mx-auto"
+                />
+              </div>
+            </div>
             
             {/* More From This Category Section */}
             <MoreFromThisCategory
@@ -1234,16 +1304,17 @@ const ProductPage = () => {
               </div>              {/* Size Selection - Only show if sizes are available, not empty, and size value isn't empty */}
               {p.sizes && p.sizes.length > 0 && p.sizes.some((size: any) => size.size && size.size.trim() !== "") ? (
                 <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-medium">Select Size</h3>
-                    <Button
+                    <Link href="/size-guide">
+                      <Button
                       variant="link"
                       className="text-sm p-0 h-auto"
-                      onClick={() => setIsSizeGuideOpen(true)}
-                    >
+                      >
                       Size Guide
-                    </Button>
-                  </div>
+                      </Button>
+                    </Link>
+                    </div>
                   
                   <div id="sizeGrid" className="grid grid-cols-4 gap-2 mb-3">
                     {p.sizes.map((size: any, index: number) => {
@@ -1387,28 +1458,116 @@ const ProductPage = () => {
                   </TabsContent>
                   
                   <TabsContent value="shipping" className="space-y-4">
-                    <h3 className="font-bold text-base sm:text-lg mb-3">Shipping & Returns</h3>
+                    <h3 className="font-bold text-base sm:text-lg mb-3">
+                      {shippingReturnsData?.title || "Shipping & Returns"}
+                    </h3>
                     
-                    <div className="space-y-4 text-sm text-gray-700">
-                      <div className="flex items-start gap-3">
-                        <Truck size={18} className="text-gray-700 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-medium mb-1">Free Standard Shipping</p>
-                          <p>On all orders above ₹999. Orders typically arrive within 5-7 business days.</p>
+                    {shippingReturnsLoading ? (
+                      <div className="space-y-4">
+                        <div className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-full mb-4"></div>
+                          <div className="h-4 bg-gray-200 rounded w-2/3 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-full"></div>
                         </div>
                       </div>
-                      
-                      <div className="flex items-start gap-3">
-                        <RefreshCcw size={18} className="text-gray-700 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-medium mb-1">30-Day Returns</p>
-                          <p>Not completely satisfied? Return unworn items within 30 days for a full refund.</p>
-                          <Link href="/return-policy" className="underline text-gray-900 mt-1 inline-block">
+                    ) : shippingReturnsError ? (
+                      <div className="space-y-4 text-sm text-gray-700">
+                        <div className="flex items-start gap-3">
+                          <Truck size={18} className="text-gray-700 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium mb-1">Free Standard Shipping</p>
+                            <p>On all orders above ₹999. Orders typically arrive within 5-7 business days.</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-start gap-3">
+                          <RefreshCcw size={18} className="text-gray-700 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium mb-1">30-Day Returns</p>
+                            <p>Not completely satisfied? Return unworn items within 30 days for a full refund.</p>
+                            <Link href="/return-policy" className="underline text-gray-900 mt-1 inline-block">
+                              View our complete return policy
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 text-sm text-gray-700">
+                        {/* Custom CSS if provided */}
+                        {shippingReturnsData?.customCSS && (
+                          <style dangerouslySetInnerHTML={{ __html: shippingReturnsData.customCSS }} />
+                        )}
+                        
+                        {/* Subtitle */}
+                        {shippingReturnsData?.subtitle && (
+                          <p className="text-gray-600 mb-4">{shippingReturnsData.subtitle}</p>
+                        )}
+                        
+                        {/* Dynamic Shipping Options */}
+                        {shippingReturnsData?.shippingOptions
+                          ?.filter(option => option.isActive)
+                          ?.sort((a, b) => a.order - b.order)
+                          ?.map((option, index) => (
+                            <div key={index} className="flex items-start gap-3">
+                              <span className="text-lg flex-shrink-0 mt-0.5">{option.icon}</span>
+                              <div>
+                                <p className="font-medium mb-1">{option.title}</p>
+                                <p>{option.description}</p>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  <span>Delivery: {option.deliveryTime}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>Cost: {option.cost === 0 ? 'Free' : `₹${option.cost}`}</span>
+                                  {option.minOrderAmount > 0 && (
+                                    <>
+                                      <span className="mx-2">•</span>
+                                      <span>Min order: ₹{option.minOrderAmount}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        
+                        {/* Dynamic Return Information */}
+                        {shippingReturnsData?.returnInfo
+                          ?.filter(info => info.isActive)
+                          ?.sort((a, b) => a.order - b.order)
+                          ?.map((info, index) => (
+                            <div key={index} className="flex items-start gap-3">
+                              <span className="text-lg flex-shrink-0 mt-0.5">{info.icon}</span>
+                              <div>
+                                <p className="font-medium mb-1">{info.title}</p>
+                                <p>{info.description}</p>
+                                {info.conditions && info.conditions.length > 0 && (
+                                  <ul className="text-xs text-gray-500 mt-2 list-disc list-inside">
+                                    {info.conditions.map((condition, i) => (
+                                      <li key={i}>{condition}</li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Return period: {info.returnPeriodDays} days
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        
+                        {/* Additional Information */}
+                        {shippingReturnsData?.additionalInfo && (
+                          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-700">{shippingReturnsData.additionalInfo}</p>
+                          </div>
+                        )}
+                        
+                        {/* Fallback link to return policy page */}
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <Link href="/return-policy" className="underline text-gray-900 text-sm">
                             View our complete return policy
                           </Link>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="vendor" className="space-y-4">
